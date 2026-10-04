@@ -172,7 +172,7 @@
 
 | Свойство | Тип | Описание |
 |----------|-----|----------|
-| `group` | string | Ориентация: `horizontal`, `vertical`, `alwaysHorizontal`, `alwaysVertical`, `collapsible` |
+| `group` | string | Ориентация: `horizontal`, `vertical`, `alwaysHorizontal`, `alwaysVertical`, `horizontalIfPossible`, `autoScreenTypeSensitive`, `collapsible` |
 | `children` | array | Вложенные элементы |
 | `showTitle` | bool | Показывать заголовок группы |
 | `representation` | string | `none`, `normal`, `weak`, `strong` |
@@ -208,6 +208,9 @@
 | `verticalStretch` | bool | Растягивание по вертикали |
 | `autoMaxWidth` | bool | Автомаксимальная ширина |
 | `autoMaxHeight` | bool | Автомаксимальная высота |
+
+Булевы свойства пишутся в форму с заданным значением, и `true`, и `false`: у поля и у колонки таблицы
+умолчания платформы разные, поэтому явное значение из выгрузки сохраняется как есть.
 
 #### check - CheckBoxField
 
@@ -262,8 +265,8 @@
 | `path` | string | DataPath |
 | `columns` | array | Колонки (элементы input/check/labelField/picField) |
 | `representation` | string | `List`, `Tree`, `HierarchicalList` |
-| `changeRowSet` | bool | Разрешить добавление/удаление строк |
-| `changeRowOrder` | bool | Разрешить перемещение строк |
+| `changeRowSet` | bool | Разрешить добавление/удаление строк; `false` пишется явно |
+| `changeRowOrder` | bool | Разрешить перемещение строк; `false` пишется явно |
 | `height` | int | Высота в строках таблицы |
 | `header` | bool | Показывать шапку |
 | `footer` | bool | Показывать подвал |
@@ -282,9 +285,11 @@
 }
 ```
 
-Page поддерживает `group` для задания ориентации содержимого и `children` для вложенных элементов.
+Page поддерживает `title`, `group` для задания ориентации содержимого (те же значения, что у группы,
+кроме `collapsible`) и `children` для вложенных элементов. Тип элемента определяется ключом `page`,
+даже если у страницы есть ключ `group`.
 
-Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `TabsOnBottom`, `TabsOnLeft`, `TabsOnRight`.
+Pages поддерживает `title` и `pagesRepresentation`: `None`, `TabsOnTop`, `TabsOnBottom`, `TabsOnLeft`, `TabsOnRight`.
 
 #### button - Button
 
@@ -310,7 +315,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 
 | Свойство | Тип | Описание |
 |----------|-----|----------|
-| `src` или `picture` (как свойство) | string | Ссылка на картинку |
+| `src` или `picture` (как свойство) | string | Ссылка на картинку. `picture` считается картинкой только при заданном `name`; без `name` это имя элемента, и картинка не пишется |
 | `hyperlink` | bool | Режим гиперссылки |
 | `width` | int | Ширина |
 | `height` | int | Высота |
@@ -333,11 +338,15 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 { "cmdBar": "КоманднаяПанель", "children": [ ... ] }
 ```
 
+Поддерживает `title`, `autofill` и `children`.
+
 #### popup - Popup
 
 ```json
 { "popup": "Печать", "picture": "StdPicture.Print", "children": [ ... ] }
 ```
+
+Здесь `picture` - свойство (картинка подменю): тип элемента определяется ключом `popup`.
 
 ---
 
@@ -359,7 +368,7 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `name` | string | Имя реквизита (обязательно) |
 | `type` | string | Тип (shorthand) |
 | `main` | bool | Основной реквизит формы |
-| `title` | string | Заголовок |
+| `title` | string | Заголовок. Без ключа у обычного реквизита пишется заголовок, равный имени (как у платформы); разбор такой заголовок не выдает |
 | `savedData` | bool | Сохраняемые данные |
 | `fillChecking` | string | `Show`, `DontShow` |
 | `columns` | array | Колонки для ValueTable/ValueTree |
@@ -437,6 +446,24 @@ Pages поддерживает `pagesRepresentation`: `None`, `TabsOnTop`, `Tabs
 | `"FormattedString"` | `v8ui:FormattedString` |
 | `"Picture"` | `v8ui:Picture` |
 | `"DynamicList"` | `cfg:DynamicList` |
+
+### Типы со своим пространством имен
+
+Платформа объявляет пространство имен этих типов у тега `<v8:Type>`. Сборщик пишет тип с префиксом
+и объявляет префикс в заголовке формы. В DSL тип задается без префикса; запись с префиксом
+(`"mxl:SpreadsheetDocument"`) тоже принимается.
+
+| DSL | XML | Пространство имен |
+|-----|-----|-------------------|
+| `"SpreadsheetDocument"` | `mxl:SpreadsheetDocument` | `http://v8.1c.ru/8.2/data/spreadsheet` |
+| `"FormattedDocument"` | `fd:FormattedDocument` | `http://v8.1c.ru/8.2/data/formatted-document` |
+| `"TextDocument"` | `txt:TextDocument` | `http://v8.1c.ru/8.1/data/txtedt` |
+| `"Chart"` | `chart:Chart` | `http://v8.1c.ru/8.2/data/chart` |
+| `"PDFDocument"` | `pdfdoc:PDFDocument` | `http://v8.1c.ru/8.3/data/pdf` |
+| `"Planner"` | `pl:Planner` | `http://v8.1c.ru/8.3/data/planner` |
+| `"GeographicalSchema"` | `geo:GeographicalSchema` | `http://v8.1c.ru/8.2/data/geo` |
+| `"FlowchartContextType"` | `gs:FlowchartContextType` | `http://v8.1c.ru/8.2/data/graphscheme` |
+| `"DataAnalysisTimeIntervalUnitType"` | `da:DataAnalysisTimeIntervalUnitType` | `http://v8.1c.ru/8.2/data/data-analysis` |
 
 ### Составные типы
 

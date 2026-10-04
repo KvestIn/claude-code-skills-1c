@@ -67,6 +67,15 @@ $GROUP_ORIENTATION_REVERSE = @{
 	"Vertical"         = "vertical"
 	"AlwaysHorizontal" = "alwaysHorizontal"
 	"AlwaysVertical"   = "alwaysVertical"
+	"HorizontalIfPossible"    = "horizontalIfPossible"
+	"AutoScreenTypeSensitive" = "autoScreenTypeSensitive"
+}
+
+# Ориентация группы или страницы в DSL; неизвестное значение - в _todo, результат пустой.
+function Get-GroupOrientationDsl([string]$value, [string]$name, $todos) {
+	if ($GROUP_ORIENTATION_REVERSE.ContainsKey($value)) { return $GROUP_ORIENTATION_REVERSE[$value] }
+	Add-Todo $todos ("Элемент '" + $name + "': ориентация Group=" + $value + " не поддержана DSL")
+	return ""
 }
 
 $GROUP_REPRESENTATION_REVERSE = @{
@@ -249,6 +258,13 @@ function Get-MLText($node, $todos, [string]$owner) {
 	return $null
 }
 
+# Типы платформы, пространство имен которых объявлено у тега <v8:Type>; набор совпадает с
+# nsTypes сборщика.
+$NS_TYPE_NAMES = @(
+	"SpreadsheetDocument", "FormattedDocument", "TextDocument", "Chart", "PDFDocument", "Planner",
+	"GeographicalSchema", "FlowchartContextType", "DataAnalysisTimeIntervalUnitType"
+)
+
 function Get-BaseTypeToken([string]$raw) {
 	if ($raw -eq "xs:string") { return "string" }
 	if ($raw -eq "xs:decimal") { return "decimal" }
@@ -256,6 +272,9 @@ function Get-BaseTypeToken([string]$raw) {
 	if ($raw -eq "xs:dateTime") { return "dateTime" }
 	if ($raw.StartsWith("cfg:")) { return $raw.Substring(4) }
 	if ($PLATFORM_TYPE_REVERSE.ContainsKey($raw)) { return $PLATFORM_TYPE_REVERSE[$raw] }
+	# Типы со своим пространством имен (mxl:SpreadsheetDocument, d5p1:TextDocument): префикс
+	# объявлен у самого тега и в DSL не нужен - сборщик ставит его сам.
+	if (($raw -match '^[A-Za-z][\w-]*:(\w+)$') -and ($NS_TYPE_NAMES -ccontains $Matches[1])) { return $Matches[1] }
 	return $raw
 }
 
@@ -455,8 +474,7 @@ function Read-Element($node) {
 		foreach ($ch in (Get-ElemChildren $node)) {
 			$ln = $ch.LocalName
 			if ($ln -eq "Group") {
-				$v = Get-NodeText $ch
-				if ($GROUP_ORIENTATION_REVERSE.ContainsKey($v)) { $orientation = $GROUP_ORIENTATION_REVERSE[$v] } else { $orientation = $v }
+				$orientation = Get-GroupOrientationDsl (Get-NodeText $ch) $name $todos
 			}
 			elseif (($ln -eq "Behavior") -and ((Get-NodeText $ch) -eq "Collapsible")) {
 				$collapsible = $true
@@ -582,8 +600,8 @@ function Read-Element($node) {
 		}
 		elseif ($key -eq "page") {
 			if ($ln -eq "Group") {
-				$v = Get-NodeText $ch
-				if ($GROUP_ORIENTATION_REVERSE.ContainsKey($v)) { $el["group"] = $GROUP_ORIENTATION_REVERSE[$v] } else { $el["group"] = $v }
+				$orientation = Get-GroupOrientationDsl (Get-NodeText $ch) $name $todos
+				if ($orientation) { $el["group"] = $orientation }
 			}
 			elseif ($ln -eq "ChildItems") { Read-ChildItems $ch "children" $el }
 			else { Add-UnknownChild $ch $ln $name $todos }
@@ -747,7 +765,8 @@ function Read-Attribute($node) {
 	$a["name"] = $name
 	if ($typeStr) { $a["type"] = $typeStr }
 	if ($main) { $a["main"] = $true }
-	if ($null -ne $title) { $a["title"] = $title }
+	# Заголовок обычного реквизита, равный имени, сборщик ставит сам - в DSL он лишний.
+	if (($null -ne $title) -and -not (($title -ceq $name) -and -not $main)) { $a["title"] = $title }
 	if ($savedData) { $a["savedData"] = $true }
 	if ($fillChecking) { $a["fillChecking"] = $fillChecking }
 	if ($null -ne $columns) { $a["columns"] = $columns }
