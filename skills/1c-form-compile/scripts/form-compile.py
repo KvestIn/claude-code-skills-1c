@@ -1705,6 +1705,16 @@ def emit_common_flags(lines, el, indent):
         lines.append(f"{indent}<ReadOnly>true</ReadOnly>")
 
 
+
+def title_location_value(value):
+    """Приводит размещение заголовка к написанию платформы: None, Left, Right, Top, Bottom, Auto.
+
+    Платформа принимает перечисление только с заглавной буквы; "right" в Form.xml дает исключение XDTO
+    при загрузке конфигурации.
+    """
+    loc_map = {'none': 'None', 'left': 'Left', 'right': 'Right', 'top': 'Top', 'bottom': 'Bottom', 'auto': 'Auto'}
+    return loc_map.get(str(value).lower(), str(value))
+
 def emit_title(lines, el, name, indent):
     if el.get('title'):
         emit_mltext(lines, indent, 'Title', el['title'])
@@ -2148,9 +2158,7 @@ def emit_input(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
 
     if el.get('titleLocation'):
-        loc_map = {'none': 'None', 'left': 'Left', 'right': 'Right', 'top': 'Top', 'bottom': 'Bottom'}
-        loc = loc_map.get(str(el['titleLocation']), str(el['titleLocation']))
-        lines.append(f'{inner}<TitleLocation>{loc}</TitleLocation>')
+        lines.append(f'{inner}<TitleLocation>{title_location_value(el["titleLocation"])}</TitleLocation>')
 
     if el.get('multiLine') is True:
         lines.append(f'{inner}<MultiLine>true</MultiLine>')
@@ -2206,7 +2214,7 @@ def emit_check(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
 
     if el.get('titleLocation'):
-        lines.append(f'{inner}<TitleLocation>{el["titleLocation"]}</TitleLocation>')
+        lines.append(f'{inner}<TitleLocation>{title_location_value(el["titleLocation"])}</TitleLocation>')
 
     # Companions
     emit_companion(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner)

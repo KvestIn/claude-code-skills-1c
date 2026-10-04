@@ -2215,6 +2215,20 @@ function Emit-CommonFlags {
 	if ($el.readOnly -eq $true) { X "$indent<ReadOnly>true</ReadOnly>" }
 }
 
+
+# Платформа принимает размещение заголовка только с заглавной буквы: "right" в Form.xml дает исключение XDTO.
+function Get-TitleLocationValue($value) {
+	switch ("$value".ToLower()) {
+		"none"   { return "None" }
+		"left"   { return "Left" }
+		"right"  { return "Right" }
+		"top"    { return "Top" }
+		"bottom" { return "Bottom" }
+		"auto"   { return "Auto" }
+		default  { return "$value" }
+	}
+}
+
 function Emit-Title {
 	param($el, [string]$name, [string]$indent)
 	if ($el.title) {
@@ -2370,15 +2384,7 @@ function Emit-Input {
 	Emit-CommonFlags -el $el -indent $inner
 
 	if ($el.titleLocation) {
-		$loc = switch ("$($el.titleLocation)") {
-			"none"   { "None" }
-			"left"   { "Left" }
-			"right"  { "Right" }
-			"top"    { "Top" }
-			"bottom" { "Bottom" }
-			default  { "$($el.titleLocation)" }
-		}
-		X "$inner<TitleLocation>$loc</TitleLocation>"
+		X "$inner<TitleLocation>$(Get-TitleLocationValue $el.titleLocation)</TitleLocation>"
 	}
 
 	if ($el.multiLine -eq $true) { X "$inner<MultiLine>true</MultiLine>" }
@@ -2423,7 +2429,7 @@ function Emit-Check {
 	Emit-CommonFlags -el $el -indent $inner
 
 	if ($el.titleLocation) {
-		X "$inner<TitleLocation>$($el.titleLocation)</TitleLocation>"
+		X "$inner<TitleLocation>$(Get-TitleLocationValue $el.titleLocation)</TitleLocation>"
 	}
 
 	# Companions
