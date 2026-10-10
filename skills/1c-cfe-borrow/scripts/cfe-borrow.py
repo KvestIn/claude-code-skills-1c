@@ -5,6 +5,7 @@
 import argparse
 import os
 import re
+import shutil
 import sys
 import uuid
 import copy
@@ -716,11 +717,11 @@ def main():
         obj_file = os.path.join(ext_dir, dir_name, f"{obj_name}.xml")
         return os.path.isfile(obj_file)
 
-    def register_form_in_object(type_name, obj_name, form_name):
+    def register_form_in_object(type_name, obj_name, form_name, tag="Form"):
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
         obj_file = os.path.join(ext_dir, dir_name, f"{obj_name}.xml")
         if not os.path.isfile(obj_file):
-            warn(f"Parent object file not found: {obj_file} \u2014 form not registered in ChildObjects")
+            warn(f"Parent object file not found: {obj_file} \u2014 {tag} not registered in ChildObjects")
             return
 
         obj_parser = etree.XMLParser(remove_blank_text=False)
@@ -749,19 +750,75 @@ def main():
 
         # Dedup
         for c in child_objs:
-            if isinstance(c.tag, str) and localname(c) == "Form" and (c.text or "") == form_name:
-                warn(f"Form '{form_name}' already in ChildObjects of {type_name}.{obj_name}")
+            if isinstance(c.tag, str) and localname(c) == tag and (c.text or "") == form_name:
+                warn(f"{tag} '{form_name}' already in ChildObjects of {type_name}.{obj_name}")
                 return
 
         if len(child_objs) == 0 and not (child_objs.text and child_objs.text.strip()):
             child_objs.text = "\r\n\t\t"
 
-        form_el = etree.Element(f"{{{MD_NS}}}Form")
+        form_el = etree.Element(f"{{{MD_NS}}}{tag}")
         form_el.text = form_name
-        insert_before_closing(child_objs, form_el, "\t\t\t")
+        # порядок ChildObjects в выгрузке: реквизиты, табличные части, формы, макеты, команды
+        later = ("Template", "Command") if tag == "Form" else ("Command",)
+        ref = next((c for c in child_objs if isinstance(c.tag, str) and localname(c) in later), None)
+        if ref is not None:
+            insert_before_ref(child_objs, form_el, ref, "\t\t\t")
+        else:
+            insert_before_closing(child_objs, form_el, "\t\t\t")
 
         save_xml_bom(obj_tree, obj_file)
-        info(f"  Registered form in: {obj_file}")
+        info(f"  Registered {tag.lower()} in: {obj_file}")
+
+    def borrow_template(type_name, obj_name, template_name):
+        """Заимствует макет объекта: метаданные с ObjectBelonging=Adopted, копия содержимого Ext/ и запись
+        <Template> в ChildObjects заимствованного объекта. Без записи в ChildObjects платформа макет при
+        загрузке расширения пропускает (06.10.2026: схема компоновки отчета в расширении не применялась)."""
+        dir_name = CHILD_TYPE_DIR_MAP[type_name]
+        src_meta = os.path.join(cfg_dir, dir_name, obj_name, "Templates", f"{template_name}.xml")
+        if not os.path.isfile(src_meta):
+            print(f"Source template not found: {src_meta}", file=sys.stderr)
+            sys.exit(1)
+        with open(src_meta, "r", encoding="utf-8-sig") as fh:
+            src_text = fh.read()
+        m_uuid = re.search(r'<Template\s+uuid="([^"]+)"', src_text)
+        m_type = re.search(r"<TemplateType>([^<]+)</TemplateType>", src_text)
+        if not m_uuid:
+            print(f"No uuid on source template: {src_meta}", file=sys.stderr)
+            sys.exit(1)
+        tpl_dir = os.path.join(ext_dir, dir_name, obj_name, "Templates")
+        tpl_meta = os.path.join(tpl_dir, f"{template_name}.xml")
+        new_uuid = existing_object_uuid(tpl_meta, "Template") or new_guid()
+        lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            f'<MetaDataObject {XMLNS_DECL} version="{format_version}">',
+            f'\t<Template uuid="{new_uuid}">',
+            '\t\t<Properties>',
+            '\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>',
+            f'\t\t\t<Name>{template_name}</Name>',
+            '\t\t\t<Comment/>',
+            f'\t\t\t<ExtendedConfigurationObject>{m_uuid.group(1)}</ExtendedConfigurationObject>',
+            f'\t\t\t<TemplateType>{m_type.group(1) if m_type else "SpreadsheetDocument"}</TemplateType>',
+            '\t\t</Properties>',
+            '\t</Template>',
+            '</MetaDataObject>',
+        ]
+        os.makedirs(tpl_dir, exist_ok=True)
+        save_text_bom(tpl_meta, "\n".join(lines))
+        info(f"  Created: {tpl_meta}")
+        created = [tpl_meta]
+        src_ext = os.path.join(cfg_dir, dir_name, obj_name, "Templates", template_name, "Ext")
+        dst_ext = os.path.join(tpl_dir, template_name, "Ext")
+        # содержимое копируется только когда его еще нет: повторное заимствование не затирает правки макета
+        if os.path.isdir(src_ext) and not os.path.isdir(dst_ext):
+            shutil.copytree(src_ext, dst_ext)
+            for root_dir, _, names in os.walk(dst_ext):
+                created += [os.path.join(root_dir, n) for n in names]
+            info(f"  Copied template content: {dst_ext}")
+        elif os.path.isdir(dst_ext):
+            info(f"  Kept: {dst_ext}")
+        register_form_in_object(type_name, obj_name, template_name, tag="Template")
+        return created
 
     # --- 11b. Collect DataPath references from source Form.xml ---
     def collect_form_data_paths(form_xml_path):
@@ -931,10 +988,13 @@ def main():
         extra_props = {}
         props_node = src_el.find(f"{{{MD_NS}}}Properties")
         if props_node is not None:
+            # Свойства нумерации документа (NumberType, NumberLength, NumberAllowedLength, NumberPeriodicity)
+            # не копируются: с ними платформа считает нумерацию заимствованного документа измененной и отвергает
+            # расширение - "отключать контролируемость свойства Нумератор недопустимо" (06.10.2026, 8.5.1,
+            # Document._ДемоСчетНаОплатуПокупателю; без этих свойств расширение загружается).
             props_to_extract = [
                 "Hierarchical", "FoldersOnTop", "CodeLength", "DescriptionLength",
-                "CodeType", "CodeAllowedLength", "NumberType", "NumberLength",
-                "NumberAllowedLength", "NumberPeriodicity",
+                "CodeType", "CodeAllowedLength",
             ]
             for p_name in props_to_extract:
                 p_node = props_node.find(f"{{{MD_NS}}}{p_name}")
@@ -1636,7 +1696,7 @@ def main():
     for item in items:
         dot_idx = item.find(".")
         if dot_idx < 1:
-            print(f"Invalid format '{item}', expected 'Type.Name' or 'Type.Name.Form.FormName'", file=sys.stderr)
+            print(f"Invalid format '{item}', expected 'Type.Name', 'Type.Name.Form.FormName' or 'Type.Name.Template.TemplateName'", file=sys.stderr)
             sys.exit(1)
         type_name = item[:dot_idx]
         remainder = item[dot_idx + 1:]
@@ -1649,16 +1709,37 @@ def main():
             sys.exit(1)
 
         form_name = None
+        template_name = None
         form_idx = remainder.find(".Form.")
+        tpl_idx = remainder.find(".Template.")
         if form_idx > 0:
             obj_name = remainder[:form_idx]
             form_name = remainder[form_idx + 6:]
+        elif tpl_idx > 0:
+            obj_name = remainder[:tpl_idx]
+            template_name = remainder[tpl_idx + 10:]
         else:
             obj_name = remainder
 
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
 
-        if form_name:
+        if template_name:
+            # --- Template borrowing ---
+            info(f"Borrowing template {type_name}.{obj_name}.Template.{template_name}...")
+            if not test_object_borrowed(type_name, obj_name):
+                info(f"  Parent object {type_name}.{obj_name} not yet borrowed — borrowing first...")
+                src = read_source_object(type_name, obj_name)
+                borrowed_xml = build_borrowed_object_xml(type_name, obj_name, src["Uuid"], src["Properties"])
+                target_dir = os.path.join(ext_dir, dir_name)
+                os.makedirs(target_dir, exist_ok=True)
+                target_file = os.path.join(target_dir, f"{obj_name}.xml")
+                save_text_bom(target_file, borrowed_xml)
+                info(f"  Created: {target_file}")
+                add_to_child_objects(type_name, obj_name)
+                borrowed_files.append(target_file)
+            borrowed_files.extend(borrow_template(type_name, obj_name, template_name))
+            borrowed_count += 1
+        elif form_name:
             # --- Form borrowing ---
             info(f"Borrowing form {type_name}.{obj_name}.Form.{form_name}...")
 

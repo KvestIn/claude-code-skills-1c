@@ -70,6 +70,23 @@ def main():
         sys.exit(1)
 
     # --- Resolve ConfigPath ---
+    # Без -ConfigPath ищем выгрузку основной конфигурации в текущем каталоге и выше: расширение с нулевым
+    # UUID языка не загружается в базу (06.10.2026, задачи на расширения: модель не передавала -ConfigPath).
+    if not args.ConfigPath:
+        probe = os.path.abspath(os.getcwd())
+        while True:
+            candidate = os.path.join(probe, "Configuration.xml")
+            if os.path.exists(candidate):
+                with open(candidate, 'r', encoding='utf-8-sig', errors='replace') as fh:
+                    if "ConfigurationExtensionPurpose" not in fh.read(20000):
+                        args.ConfigPath = candidate
+                        print(f"[INFO] Base config found automatically: {candidate}")
+                        break
+            parent = os.path.dirname(probe)
+            if parent == probe:
+                break
+            probe = parent
+
     base_lang_uuid = "00000000-0000-0000-0000-000000000000"
     if args.ConfigPath:
         config_path = args.ConfigPath

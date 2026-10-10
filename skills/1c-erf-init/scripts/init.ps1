@@ -206,6 +206,6 @@ if ($WithSKD) {
 	$skdFilePath = Join-Path $skdExtDir "Template.xml"
 	[System.IO.File]::WriteAllText($skdFilePath, $skdContent, $enc)
 
-	Write-Host "     СКД:     $skdMetaPath"
-	Write-Host "     Тело:    $skdFilePath"
+	Write-Host "     Макет:   $skdMetaPath (метаданные макета, не изменять)"
+	Write-Host "     Схема:   $skdFilePath (сюда пишет 1c-skd-compile: -OutputPath)"
 }

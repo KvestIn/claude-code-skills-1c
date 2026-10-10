@@ -933,13 +933,13 @@ function Borrow-Form {
 
 # --- 10d. Helper: register form in parent object's ChildObjects ---
 function Register-FormInObject {
-	param([string]$typeName, [string]$objName, [string]$formName)
+	param([string]$typeName, [string]$objName, [string]$formName, [string]$tag = "Form")
 
 	$dirName = $childTypeDirMap[$typeName]
 	$objFile = Join-Path (Join-Path $extDir $dirName) "${objName}.xml"
 
 	if (-not (Test-Path $objFile)) {
-		Warn "Parent object file not found: $objFile - form not registered in ChildObjects"
+		Warn "Parent object file not found: $objFile - $tag not registered in ChildObjects"
 		return
 	}
 
@@ -972,8 +972,8 @@ function Register-FormInObject {
 
 	# Check dedup
 	foreach ($c in $childObjs.ChildNodes) {
-		if ($c.NodeType -eq 'Element' -and $c.LocalName -eq "Form" -and $c.InnerText -eq $formName) {
-			Warn "Form '$formName' already in ChildObjects of ${typeName}.${objName}"
+		if ($c.NodeType -eq 'Element' -and $c.LocalName -eq $tag -and $c.InnerText -eq $formName) {
+			Warn "$tag '$formName' already in ChildObjects of ${typeName}.${objName}"
 			return
 		}
 	}
@@ -984,13 +984,22 @@ function Register-FormInObject {
 		$childObjs.AppendChild($closeWs) | Out-Null
 	}
 
-	# Add <Form>formName</Form>
-	$formEl = $objDoc.CreateElement("Form", "http://v8.1c.ru/8.3/MDClasses")
+	# Add <Form>formName</Form> (or <Template>)
+	$formEl = $objDoc.CreateElement($tag, "http://v8.1c.ru/8.3/MDClasses")
 	$formEl.InnerText = $formName
 
+	# порядок ChildObjects в выгрузке: реквизиты, табличные части, формы, макеты, команды
+	$later = if ($tag -eq "Form") { @("Template", "Command") } else { @("Command") }
+	$refNode = $null
+	foreach ($c in $childObjs.ChildNodes) {
+		if ($c.NodeType -eq 'Element' -and $later -contains $c.LocalName) { $refNode = $c; break }
+	}
 	$trailing = $childObjs.LastChild
 	$ws = $objDoc.CreateWhitespace("`r`n`t`t`t")
-	if ($trailing -and ($trailing.NodeType -eq 'Whitespace' -or $trailing.NodeType -eq 'SignificantWhitespace')) {
+	if ($refNode) {
+		$childObjs.InsertBefore($formEl, $refNode) | Out-Null
+		$childObjs.InsertBefore($objDoc.CreateWhitespace("`r`n`t`t`t"), $refNode) | Out-Null
+	} elseif ($trailing -and ($trailing.NodeType -eq 'Whitespace' -or $trailing.NodeType -eq 'SignificantWhitespace')) {
 		$childObjs.InsertBefore($ws, $trailing) | Out-Null
 		$childObjs.InsertBefore($formEl, $trailing) | Out-Null
 	} else {
@@ -1021,7 +1030,66 @@ function Register-FormInObject {
 
 	$utf8Bom2 = New-Object System.Text.UTF8Encoding($true)
 	[System.IO.File]::WriteAllText($objFile, $text2, $utf8Bom2)
-	Info "  Registered form in: $objFile"
+	Info "  Registered $($tag.ToLower()) in: $objFile"
+}
+
+# --- 10d2. Borrow template: Тип.Имя.Template.ИмяМакета ---
+# Метаданные макета с ObjectBelonging=Adopted, копия содержимого Ext/ и запись <Template> в ChildObjects
+# заимствованного объекта. Без записи в ChildObjects платформа макет при загрузке расширения пропускает.
+function Borrow-Template {
+	param([string]$typeName, [string]$objName, [string]$templateName)
+
+	$dirName = $childTypeDirMap[$typeName]
+	$enc = New-Object System.Text.UTF8Encoding($true)
+	$srcMeta = Join-Path (Join-Path (Join-Path (Join-Path $cfgDir $dirName) $objName) "Templates") "${templateName}.xml"
+	if (-not (Test-Path $srcMeta)) {
+		Write-Error "Source template not found: $srcMeta"
+		exit 1
+	}
+	$srcText = [System.IO.File]::ReadAllText($srcMeta, $enc)
+	$mUuid = [regex]::Match($srcText, '<Template\s+uuid="([^"]+)"')
+	$mType = [regex]::Match($srcText, '<TemplateType>([^<]+)</TemplateType>')
+	if (-not $mUuid.Success) {
+		Write-Error "No uuid on source template: $srcMeta"
+		exit 1
+	}
+	$tplType = if ($mType.Success) { $mType.Groups[1].Value } else { "SpreadsheetDocument" }
+
+	$tplDir = Join-Path (Join-Path (Join-Path $extDir $dirName) $objName) "Templates"
+	$tplMeta = Join-Path $tplDir "${templateName}.xml"
+	$newUuid = Get-ExistingObjectUuid $tplMeta "Template"
+	if (-not $newUuid) { $newUuid = [guid]::NewGuid().ToString() }
+	$sb = New-Object System.Text.StringBuilder
+	$sb.AppendLine("<?xml version=`"1.0`" encoding=`"UTF-8`"?>") | Out-Null
+	$sb.AppendLine("<MetaDataObject $($script:xmlnsDecl) version=`"$($script:formatVersion)`">") | Out-Null
+	$sb.AppendLine("`t<Template uuid=`"${newUuid}`">") | Out-Null
+	$sb.AppendLine("`t`t<Properties>") | Out-Null
+	$sb.AppendLine("`t`t`t<ObjectBelonging>Adopted</ObjectBelonging>") | Out-Null
+	$sb.AppendLine("`t`t`t<Name>${templateName}</Name>") | Out-Null
+	$sb.AppendLine("`t`t`t<Comment/>") | Out-Null
+	$sb.AppendLine("`t`t`t<ExtendedConfigurationObject>$($mUuid.Groups[1].Value)</ExtendedConfigurationObject>") | Out-Null
+	$sb.AppendLine("`t`t`t<TemplateType>${tplType}</TemplateType>") | Out-Null
+	$sb.AppendLine("`t`t</Properties>") | Out-Null
+	$sb.AppendLine("`t</Template>") | Out-Null
+	$sb.Append("</MetaDataObject>") | Out-Null
+	if (-not (Test-Path $tplDir)) { New-Item -ItemType Directory -Path $tplDir -Force | Out-Null }
+	[System.IO.File]::WriteAllText($tplMeta, $sb.ToString(), $enc)
+	Info "  Created: $tplMeta"
+	$created = @($tplMeta)
+
+	$srcExt = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $cfgDir $dirName) $objName) "Templates") $templateName) "Ext"
+	$dstExt = Join-Path (Join-Path $tplDir $templateName) "Ext"
+	# содержимое копируется только когда его еще нет: повторное заимствование не затирает правки макета
+	if ((Test-Path $srcExt) -and -not (Test-Path $dstExt)) {
+		New-Item -ItemType Directory -Path (Split-Path $dstExt -Parent) -Force | Out-Null
+		Copy-Item -Path $srcExt -Destination $dstExt -Recurse
+		$created += @(Get-ChildItem -Path $dstExt -Recurse -File | ForEach-Object { $_.FullName })
+		Info "  Copied template content: $dstExt"
+	} elseif (Test-Path $dstExt) {
+		Info "  Kept: $dstExt"
+	}
+	Register-FormInObject $typeName $objName $templateName -tag "Template"
+	return $created
 }
 
 # --- 10e. Helper: check if object is already borrowed in extension ---
@@ -1228,8 +1296,11 @@ function Resolve-SourceAttributes {
 	$extraProps = [ordered]@{}
 	$propsNode = $srcEl.SelectSingleNode("md:Properties", $srcNs)
 	if ($propsNode) {
-		$propsToExtract = @("Hierarchical","FoldersOnTop","CodeLength","DescriptionLength","CodeType","CodeAllowedLength",
-			"NumberType","NumberLength","NumberAllowedLength","NumberPeriodicity")
+		# Свойства нумерации документа (NumberType, NumberLength, NumberAllowedLength, NumberPeriodicity)
+		# не копируются: с ними платформа считает нумерацию заимствованного документа измененной и отвергает
+		# расширение - "отключать контролируемость свойства Нумератор недопустимо" (06.10.2026, 8.5.1,
+		# Document._ДемоСчетНаОплатуПокупателю; без этих свойств расширение загружается).
+		$propsToExtract = @("Hierarchical","FoldersOnTop","CodeLength","DescriptionLength","CodeType","CodeAllowedLength")
 		foreach ($pName in $propsToExtract) {
 			$pNode = $propsNode.SelectSingleNode("md:${pName}", $srcNs)
 			if ($pNode) { $extraProps[$pName] = $pNode.InnerText }
@@ -1804,7 +1875,7 @@ $borrowedCount = 0
 foreach ($item in $items) {
 	$dotIdx = $item.IndexOf(".")
 	if ($dotIdx -lt 1) {
-		Write-Error "Invalid format '${item}', expected 'Type.Name' or 'Type.Name.Form.FormName'"
+		Write-Error "Invalid format '${item}', expected 'Type.Name', 'Type.Name.Form.FormName' or 'Type.Name.Template.TemplateName'"
 		exit 1
 	}
 	$typeName = $item.Substring(0, $dotIdx)
@@ -1820,17 +1891,40 @@ foreach ($item in $items) {
 
 	# Check for .Form. pattern: Type.ObjName.Form.FormName
 	$formName = $null
+	$templateName = $null
 	$formIdx = $remainder.IndexOf(".Form.")
+	$tplIdx = $remainder.IndexOf(".Template.")
 	if ($formIdx -gt 0) {
 		$objName = $remainder.Substring(0, $formIdx)
 		$formName = $remainder.Substring($formIdx + 6) # skip ".Form."
+	} elseif ($tplIdx -gt 0) {
+		$objName = $remainder.Substring(0, $tplIdx)
+		$templateName = $remainder.Substring($tplIdx + 10) # skip ".Template."
 	} else {
 		$objName = $remainder
 	}
 
 	$dirName = $childTypeDirMap[$typeName]
 
-	if ($formName) {
+	if ($templateName) {
+		# --- Template borrowing ---
+		Info "Borrowing template ${typeName}.${objName}.Template.${templateName}..."
+		if (-not (Test-ObjectBorrowed $typeName $objName)) {
+			Info "  Parent object ${typeName}.${objName} not yet borrowed - borrowing first..."
+			$src = Read-SourceObject $typeName $objName
+			$borrowedXml = Build-BorrowedObjectXml $typeName $objName $src.Uuid $src.Properties
+			$targetDir = Join-Path $extDir $dirName
+			if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
+			$targetFile = Join-Path $targetDir "${objName}.xml"
+			$enc = New-Object System.Text.UTF8Encoding($true)
+			[System.IO.File]::WriteAllText($targetFile, $borrowedXml, $enc)
+			Info "  Created: $targetFile"
+			Add-ToChildObjects $typeName $objName
+			$script:borrowedFiles += $targetFile
+		}
+		$script:borrowedFiles += (Borrow-Template $typeName $objName $templateName)
+		$borrowedCount++
+	} elseif ($formName) {
 		# --- Form borrowing ---
 		Info "Borrowing form ${typeName}.${objName}.Form.${formName}..."
 

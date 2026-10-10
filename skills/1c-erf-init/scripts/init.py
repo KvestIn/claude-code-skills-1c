@@ -192,8 +192,8 @@ def main():
         skd_file_path = os.path.join(skd_ext_dir, "Template.xml")
         write_utf8_bom(skd_file_path, skd_content)
 
-        print(f"     СКД:     {skd_meta_path}")
-        print(f"     Тело:    {skd_file_path}")
+        print(f"     Макет:   {skd_meta_path} (метаданные макета, не изменять)")
+        print(f"     Схема:   {skd_file_path} (сюда пишет 1c-skd-compile: -OutputPath)")
 
 if __name__ == '__main__':
     main()

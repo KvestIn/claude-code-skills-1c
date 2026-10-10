@@ -21,6 +21,11 @@ allowed-tools:
 | `Value` | JSON-строка с определением СКД (взаимоисключающий с DefinitionFile) |
 | `OutputPath` | Путь к выходному Template.xml |
 
+`OutputPath` - всегда тело макета `.../Templates/<ИмяМакета>/Ext/Template.xml`. Одноименный файл
+`.../Templates/<ИмяМакета>.xml` рядом с каталогом - метаданные макета; схема, записанная в него, ломает сборку
+отчета. Для отчета, созданного `1c-erf-init -WithSKD`, путь:
+`<SrcDir>/<ИмяОтчета>/Templates/ОсновнаяСхемаКомпоновкиДанных/Ext/Template.xml`.
+
 ```powershell
 # Из файла
 powershell.exe -NoProfile -File skills/1c-skd-compile/scripts/skd-compile.ps1 -DefinitionFile "<json>" -OutputPath "<Template.xml>"

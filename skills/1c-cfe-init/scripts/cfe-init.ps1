@@ -52,6 +52,22 @@ if (Test-Path $cfgFile) {
 }
 
 # --- Resolve ConfigPath ---
+# Без -ConfigPath ищем выгрузку основной конфигурации в текущем каталоге и выше: расширение с нулевым
+# UUID языка не загружается в базу (06.10.2026, задачи на расширения: модель не передавала -ConfigPath).
+if (-not $ConfigPath) {
+	$probe = (Get-Location).Path
+	while ($probe) {
+		$candidate = Join-Path $probe "Configuration.xml"
+		if ((Test-Path $candidate) -and -not ((Get-Content $candidate -Raw -Encoding UTF8) -match "ConfigurationExtensionPurpose")) {
+			$ConfigPath = $candidate
+			Write-Host "[INFO] Base config found automatically: $candidate"
+			break
+		}
+		$parent = Split-Path $probe -Parent
+		if (-not $parent -or $parent -eq $probe) { break }
+		$probe = $parent
+	}
+}
 $baseLangUuid = "00000000-0000-0000-0000-000000000000"
 $script:formatVersion = "2.17"
 if ($ConfigPath) {

@@ -163,28 +163,28 @@ def assert_edit_allowed(target_path, require):
             sys.stderr.write(f"[support-guard] ПРЕДУПРЕЖДЕНИЕ: {reason}. Цель: {rp}\n")
             return
         head = "[support-guard] Редактирование отклонено: это объект типовой конфигурации на поддержке поставщика, прямое редактирование молча сломает будущие обновления."
-        cfe = "Рекомендуемый путь: внести доработку в расширение (навыки cfe-borrow / cfe-patch-method) - состояние поддержки менять не нужно, обновления вендора сохраняются."
-        off_note = "Снять проверку для этой базы: editingAllowedCheck = warn|off в .v8-project.json."
+        cfe = "Рекомендуемый путь: внести доработку в расширение (навыки 1c-cfe-borrow / 1c-cfe-patch-method) - состояние поддержки менять не нужно, обновления вендора сохраняются."
+        off_note = "Отключение проверки (editingAllowedCheck в .v8-project.json) - решение пользователя: агент ее не меняет."
         if code == "capability-off":
             state = f"Состояние: у всей конфигурации выключена возможность изменения (режим read-only 'из коробки') - поэтому объект '{rp}' редактировать нельзя."
             fix = (
-                "Либо снять защиту явно (навык support-edit, два шага):\n"
-                f'  1. support-edit -Path "{cfg_dir}" -Capability on - включить возможность изменения (объекты пока остаются на замке);\n'
-                f'  2. support-edit -Path "{rp}" -Set editable - открыть этот объект для редактирования.\n'
+                "Только по решению пользователя - снять защиту явно (навык 1c-support-state, два шага):\n"
+                f'  1. 1c-support-state -Path "{cfg_dir}" -Capability on - включить возможность изменения (объекты пока остаются на замке);\n'
+                f'  2. 1c-support-state -Path "{rp}" -Set editable - открыть этот объект для редактирования.\n'
                 "  Изменение применяется в базу полной загрузкой выгрузки и обходит механизм обновлений вендора."
             )
         elif code == "not-removed":
             state = f"Состояние: объект '{rp}' на поддержке (не снят с поддержки) - его удаление разорвет обновления вендора."
             fix = (
-                "Либо сначала снять объект с поддержки, затем удалять:\n"
-                f'  support-edit -Path "{rp}" -Set off-support - объект уходит из-под обновлений, после этого удаление безопасно.'
+                "Только по решению пользователя - сначала снять объект с поддержки, затем удалять (навык 1c-support-state):\n"
+                f'  1c-support-state -Path "{rp}" -Set off-support - объект уходит из-под обновлений, после этого удаление безопасно.'
             )
         else:
             state = f"Состояние: объект '{rp}' на замке (возможность изменения конфигурации включена, но сам объект не редактируется)."
             fix = (
-                "Либо разрешить редактирование этого объекта (навык support-edit, выбрать одно):\n"
-                f'  support-edit -Path "{rp}" -Set editable - редактировать и дальше получать обновления вендора (возможны конфликты слияния);\n'
-                f'  support-edit -Path "{rp}" -Set off-support - снять с поддержки: обновления по объекту больше не приходят.'
+                "Только по решению пользователя - разрешить редактирование этого объекта (навык 1c-support-state, выбрать одно):\n"
+                f'  1c-support-state -Path "{rp}" -Set editable - редактировать и дальше получать обновления вендора (возможны конфликты слияния);\n'
+                f'  1c-support-state -Path "{rp}" -Set off-support - снять с поддержки: обновления по объекту больше не приходят.'
             )
         sys.stderr.write(head + "\n" + state + "\n" + cfe + "\n" + fix + "\n" + off_note + "\n")
         sys.exit(1)
@@ -533,6 +533,10 @@ def parse_field_shorthand(s):
 
 def parse_total_shorthand(s):
     parts = s.split(':', 1)
+    if len(parts) < 2 or not parts[1].strip():
+        print(f"Ошибка: итог \"{s}\" задан без функции. Формат: \"Поле: Сумма\" "
+              f"(Сумма, Количество, Минимум, Максимум, Среднее) или объект {{dataPath, expression}}", file=sys.stderr)
+        sys.exit(1)
     data_path = parts[0].strip()
     func_part = parts[1].strip()
 
@@ -2490,6 +2494,17 @@ def main():
     assert_edit_allowed(output_path, "editable")
     if not os.path.isabs(output_path):
         output_path = os.path.join(os.getcwd(), output_path)
+
+    # Защита: OutputPath указывает на метаданные макета (<Имя>.xml рядом с каталогом <Имя>), а не на тело
+    # Ext/Template.xml - перезапись такого файла схемой ломает сборку отчета.
+    if os.path.isfile(output_path):
+        with open(output_path, encoding="utf-8-sig", errors="replace") as existing:
+            head = existing.read(2000)
+        if "<MetaDataObject" in head:
+            right = os.path.splitext(args.OutputPath)[0] + "/Ext/Template.xml"
+            print(f"Ошибка: {args.OutputPath} - файл метаданных макета, а не тело схемы. "
+                  f"Схема пишется в {right}", file=sys.stderr)
+            sys.exit(1)
 
     parent_dir = os.path.dirname(output_path)
     if parent_dir and not os.path.exists(parent_dir):
