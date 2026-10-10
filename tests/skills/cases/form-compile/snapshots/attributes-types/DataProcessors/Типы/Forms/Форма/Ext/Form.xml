@@ -148,7 +148,7 @@
 				</v8:item>
 			</Title>
 			<Type>
-				<v8:Type>ConstantsSet</v8:Type>
+				<v8:Type>cfg:ConstantsSet</v8:Type>
 			</Type>
 		</Attribute>
 		<Attribute name="ОбъектОтчета" id="23">

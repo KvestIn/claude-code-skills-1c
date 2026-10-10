@@ -335,7 +335,7 @@ function Get-OurHttpd {
 }
 
 # --- Check port availability ---
-$portCheck = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+$portCheck = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($portCheck) {
     $ourProc = Get-OurHttpd
     if ($ourProc) {

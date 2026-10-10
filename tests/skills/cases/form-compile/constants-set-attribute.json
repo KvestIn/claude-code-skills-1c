@@ -1,0 +1,25 @@
+{
+  "name": "Основной реквизит формы - набор констант (ConstantsSet, форма настроек)",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": { "type": "DataProcessor", "name": "НастройкиПрограммы" },
+      "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" }
+    },
+    {
+      "script": "form-add/scripts/form-add",
+      "args": { "-ObjectPath": "{workDir}/DataProcessors/НастройкиПрограммы.xml", "-FormName": "Форма" }
+    }
+  ],
+  "params": { "outputPath": "DataProcessors/НастройкиПрограммы/Forms/Форма/Ext/Form.xml" },
+  "validatePath": "DataProcessors/НастройкиПрограммы/Forms/Форма/Ext/Form.xml",
+  "input": {
+    "title": "Настройки программы",
+    "elements": [
+      { "input": "ИспользоватьВалюту", "path": "НаборКонстант.ИспользоватьВалюту", "title": "Использовать валюту" }
+    ],
+    "attributes": [
+      { "name": "НаборКонстант", "type": "ConstantsSet", "main": true }
+    ]
+  }
+}

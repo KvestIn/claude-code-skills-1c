@@ -1931,6 +1931,12 @@ function Emit-SingleType {
 		return
 	}
 
+	# ConstantsSet (bare: the configuration constants set, main attribute of a settings form)
+	if ($typeStr -eq "ConstantsSet") {
+		X "$indent<v8:Type>cfg:ConstantsSet</v8:Type>"
+		return
+	}
+
 	# cfg: references (CatalogRef.XXX, DocumentObject.XXX, etc.)
 	if ($typeStr -match '^(CatalogRef|CatalogObject|DocumentRef|DocumentObject|EnumRef|ChartOfAccountsRef|ChartOfAccountsObject|ChartOfCharacteristicTypesRef|ChartOfCharacteristicTypesObject|ChartOfCalculationTypesRef|ChartOfCalculationTypesObject|ExchangePlanRef|ExchangePlanObject|BusinessProcessRef|BusinessProcessObject|TaskRef|TaskObject|InformationRegisterRecordSet|InformationRegisterRecordManager|AccumulationRegisterRecordSet|AccountingRegisterRecordSet|ConstantsSet|DataProcessorObject|ReportObject)\.') {
 		X "$indent<v8:Type>cfg:$typeStr</v8:Type>"

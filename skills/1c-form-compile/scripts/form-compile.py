@@ -1931,6 +1931,11 @@ def emit_single_type(lines, type_str, indent):
         lines.append(f'{indent}<v8:Type>cfg:DynamicList</v8:Type>')
         return
 
+    # ConstantsSet (bare: the configuration constants set, main attribute of a settings form)
+    if type_str == 'ConstantsSet':
+        lines.append(f'{indent}<v8:Type>cfg:ConstantsSet</v8:Type>')
+        return
+
     # cfg: references
     if CFG_REF_PATTERN.match(type_str):
         lines.append(f'{indent}<v8:Type>cfg:{type_str}</v8:Type>')
