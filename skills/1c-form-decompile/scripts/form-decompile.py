@@ -68,6 +68,8 @@ GROUP_ORIENTATION_REVERSE = {
     "Vertical": "vertical",
     "AlwaysHorizontal": "alwaysHorizontal",
     "AlwaysVertical": "alwaysVertical",
+    "HorizontalIfPossible": "horizontalIfPossible",
+    "AutoScreenTypeSensitive": "autoScreenTypeSensitive",
 }
 
 GROUP_REPRESENTATION_REVERSE = {
@@ -209,6 +211,14 @@ def ml_text(node, todos, owner):
     return t if t else None
 
 
+# Типы платформы, пространство имен которых объявлено у тега <v8:Type>; набор совпадает с
+# NS_TYPES сборщика.
+NS_TYPE_NAMES = {
+    "SpreadsheetDocument", "FormattedDocument", "TextDocument", "Chart", "PDFDocument", "Planner",
+    "GeographicalSchema", "FlowchartContextType", "DataAnalysisTimeIntervalUnitType",
+}
+
+
 def base_type_token(raw):
     if raw == "xs:string":
         return "string"
@@ -222,6 +232,11 @@ def base_type_token(raw):
         return raw[4:]
     if raw in PLATFORM_TYPE_REVERSE:
         return PLATFORM_TYPE_REVERSE[raw]
+    # Типы со своим пространством имен (mxl:SpreadsheetDocument, d5p1:TextDocument): префикс
+    # объявлен у самого тега и в DSL не нужен - сборщик ставит его сам.
+    m = re.match(r"^[A-Za-z][\w-]*:(\w+)$", raw)
+    if m and m.group(1) in NS_TYPE_NAMES:
+        return m.group(1)
     return raw
 
 
@@ -431,6 +446,15 @@ def check_extra_attrs(node, name, todos):
         note(todos, "Элемент '" + name + "': XML-атрибут " + an + "=" + node.attrib[attr_name] + " не поддержан DSL")
 
 
+def group_orientation_dsl(value, name, todos):
+    """Ориентация группы или страницы в DSL; неизвестное значение - в _todo, результат пустой."""
+    orientation = GROUP_ORIENTATION_REVERSE.get(value)
+    if orientation is None:
+        note(todos, "Элемент '" + name + "': ориентация Group=" + value + " не поддержана DSL")
+        return ""
+    return orientation
+
+
 def parse_element(node):
     tag = lname(node.tag)
     name = node.get("name", "")
@@ -452,7 +476,7 @@ def parse_element(node):
         for ch in node:
             ln = lname(ch.tag)
             if ln == "Group":
-                orientation = GROUP_ORIENTATION_REVERSE.get(node_text(ch), node_text(ch))
+                orientation = group_orientation_dsl(node_text(ch), name, todos)
             elif ln == "Behavior" and node_text(ch) == "Collapsible":
                 collapsible = True
         if collapsible:
@@ -623,7 +647,9 @@ def parse_element(node):
                 unknown_child(ch, ln, name, todos)
         elif key == "page":
             if ln == "Group":
-                el["group"] = GROUP_ORIENTATION_REVERSE.get(node_text(ch), node_text(ch))
+                orientation = group_orientation_dsl(node_text(ch), name, todos)
+                if orientation:
+                    el["group"] = orientation
             elif ln == "ChildItems":
                 parse_child_items(ch, "children", el)
             else:
@@ -782,7 +808,8 @@ def parse_attribute(node):
         a["type"] = type_str
     if main:
         a["main"] = True
-    if title is not None:
+    # Заголовок обычного реквизита, равный имени, сборщик ставит сам - в DSL он лишний.
+    if title is not None and not (title == name and not main):
         a["title"] = title
     if saved_data:
         a["savedData"] = True

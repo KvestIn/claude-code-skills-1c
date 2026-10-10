@@ -600,10 +600,11 @@ def new_field_element(attr_name, data_path, attr_type, field_defaults, extra_pro
     el[el_type] = attr_name
     el['path'] = data_path
 
-    # Apply ref defaults
+    # Apply ref defaults. choiceButton=true у ссылочного поля - умолчание платформы, в форму его
+    # не пишут; переносится только выключенная кнопка.
     if is_ref and field_defaults and field_defaults.get('ref'):
-        if field_defaults['ref'].get('choiceButton') is True:
-            el['choiceButton'] = True
+        if field_defaults['ref'].get('choiceButton') is False:
+            el['choiceButton'] = False
 
     # Extra props
     if extra_props:
@@ -1620,6 +1621,7 @@ KNOWN_KEYS = {
     "horizontalStretch", "verticalStretch", "autoMaxWidth", "autoMaxHeight",
     "multiLine", "passwordMode", "choiceButton", "clearButton",
     "spinButton", "dropListButton", "markIncomplete", "skipOnInput", "inputHint",
+    "editMode", "wrap", "chooseType", "textEdit", "typeDomainEnabled",
     "hyperlink",
     "showTitle", "united",
     "children", "columns",
@@ -1631,6 +1633,7 @@ KNOWN_KEYS = {
     "autofill",
     "choiceMode", "initialTreeView", "enableDrag", "enableStartDrag",
     "rowPictureDataPath", "tableAutofill",
+    "commandBar", "additions", "source", "horizontalLocation",
 }
 
 # Дополнения командной панели динамического списка. Замер на платформе 8.3.27.2214:
@@ -1646,9 +1649,17 @@ ADDITION_TYPES = {
 # Имя таблицы, внутри которой идет разбор: источник дополнения по умолчанию.
 CURRENT_TABLE = []
 
-TYPE_KEYS = ["group", "input", "check", "label", "labelField", "table", "pages", "page",
-             "button", "picture", "picField", "calendar", "cmdBar", "popup",
-             "searchString", "viewStatus", "searchControl"]
+# Порядок важен: "group" и "picture" бывают и свойствами других элементов (ориентация страницы,
+# картинка кнопки или подменю), поэтому проверяются последними. Иначе страница с ориентацией
+# собиралась обычной группой с именем "vertical", а подменю с картинкой - декорацией-картинкой.
+TYPE_KEYS = ["input", "check", "label", "labelField", "table", "pages", "page",
+             "button", "picField", "calendar", "cmdBar", "popup",
+             "searchString", "viewStatus", "searchControl", "group", "picture"]
+
+
+def element_type_key(el):
+    """Ключ типа элемента DSL или None."""
+    return next((k for k in TYPE_KEYS if el.get(k) is not None), None)
 
 
 def get_handler_name(element_name, event_name):
@@ -1712,6 +1723,16 @@ def emit_common_flags(lines, el, indent):
     if el.get('readOnly') is True:
         lines.append(f"{indent}<ReadOnly>true</ReadOnly>")
 
+
+
+def title_location_value(value):
+    """Приводит размещение заголовка к написанию платформы: None, Left, Right, Top, Bottom, Auto.
+
+    Платформа принимает перечисление только с заглавной буквы; "right" в Form.xml дает исключение XDTO
+    при загрузке конфигурации.
+    """
+    loc_map = {'none': 'None', 'left': 'Left', 'right': 'Right', 'top': 'Top', 'bottom': 'Bottom', 'auto': 'Auto'}
+    return loc_map.get(str(value).lower(), str(value))
 
 def emit_title(lines, el, name, indent):
     if el.get('title'):
@@ -1818,8 +1839,34 @@ def lookup_ci(table, key):
     return None
 
 
+# Типы, пространство имен которых платформа объявляет прямо у тега <v8:Type>
+# (xmlns:mxl="..." и т.п.). Сборщик объявляет префикс в заголовке формы: проверка формы ищет
+# объявления там. Префиксы d5p1 платформа генерирует сама, здесь вместо них постоянные имена.
+NS_TYPES = {
+    "SpreadsheetDocument": ("mxl", "http://v8.1c.ru/8.2/data/spreadsheet"),
+    "FormattedDocument": ("fd", "http://v8.1c.ru/8.2/data/formatted-document"),
+    "TextDocument": ("txt", "http://v8.1c.ru/8.1/data/txtedt"),
+    "Chart": ("chart", "http://v8.1c.ru/8.2/data/chart"),
+    "PDFDocument": ("pdfdoc", "http://v8.1c.ru/8.3/data/pdf"),
+    "Planner": ("pl", "http://v8.1c.ru/8.3/data/planner"),
+    "GeographicalSchema": ("geo", "http://v8.1c.ru/8.2/data/geo"),
+    "FlowchartContextType": ("gs", "http://v8.1c.ru/8.2/data/graphscheme"),
+    "DataAnalysisTimeIntervalUnitType": ("da", "http://v8.1c.ru/8.2/data/data-analysis"),
+}
+# Префиксы NS_TYPES, использованные в форме: дописываются в заголовок после сборки.
+USED_TYPE_NS = {}
+
+
 def emit_single_type(lines, type_str, indent):
     type_str = resolve_type_str(type_str)
+
+    # Типы со своим пространством имен; принимается и запись с префиксом (mxl:SpreadsheetDocument)
+    m_ns = re.match(r'^(?:[A-Za-z][\w-]*:)?(\w+)$', type_str)
+    if m_ns and m_ns.group(1) in NS_TYPES:
+        prefix, uri = NS_TYPES[m_ns.group(1)]
+        USED_TYPE_NS[prefix] = uri
+        lines.append(f'{indent}<v8:Type>{prefix}:{m_ns.group(1)}</v8:Type>')
+        return
     # boolean
     if type_str.lower() == 'boolean':
         lines.append(f'{indent}<v8:Type>xs:boolean</v8:Type>')
@@ -1916,11 +1963,7 @@ def emit_type(lines, type_str, indent):
 # --- Element emitters ---
 
 def emit_element(lines, el, indent):
-    type_key = None
-    for key in TYPE_KEYS:
-        if el.get(key) is not None:
-            type_key = key
-            break
+    type_key = element_type_key(el)
 
     if not type_key:
         print("WARNING: Unknown element type, skipping", file=sys.stderr)
@@ -2013,6 +2056,26 @@ def resolve_horizontal_location(value):
     return str(value)
 
 
+# Ориентация группы и страницы: значение DSL -> значение платформы в <Group>.
+GROUP_ORIENTATIONS = {
+    'horizontal': 'Horizontal',
+    'vertical': 'Vertical',
+    'alwaysHorizontal': 'AlwaysHorizontal',
+    'alwaysVertical': 'AlwaysVertical',
+    'horizontalIfPossible': 'HorizontalIfPossible',
+    'autoScreenTypeSensitive': 'AutoScreenTypeSensitive',
+}
+
+
+def group_orientation(value, name):
+    """Значение <Group> для ориентации из DSL; неизвестная ориентация - предупреждение и None."""
+    orientation = GROUP_ORIENTATIONS.get(value)
+    if orientation is None and value != 'collapsible':
+        print(f"WARNING: Element '{name}': unknown group orientation '{value}' -- <Group> not written. "
+              f"Known: {', '.join(GROUP_ORIENTATIONS)}, collapsible", file=sys.stderr)
+    return orientation
+
+
 def emit_group(lines, el, name, eid, indent):
     lines.append(f'{indent}<UsualGroup name="{name}" id="{eid}">')
     inner = f'{indent}\t'
@@ -2021,13 +2084,7 @@ def emit_group(lines, el, name, eid, indent):
 
     # Group orientation
     group_val = str(el.get('group', ''))
-    orientation_map = {
-        'horizontal': 'Horizontal',
-        'vertical': 'Vertical',
-        'alwaysHorizontal': 'AlwaysHorizontal',
-        'alwaysVertical': 'AlwaysVertical',
-    }
-    orientation = orientation_map.get(group_val)
+    orientation = group_orientation(group_val, name)
     if orientation:
         lines.append(f'{inner}<Group>{orientation}</Group>')
 
@@ -2145,6 +2202,29 @@ def emit_choice_parameters(lines, el, indent):
     lines.append(f'{indent}</ChoiceParameters>')
 
 
+# Булевы свойства поля ввода: ключ DSL -> тег. Порядок - как писал сборщик прежде.
+INPUT_BOOL_PROPS = (
+    ('multiLine', 'MultiLine'), ('passwordMode', 'PasswordMode'), ('choiceButton', 'ChoiceButton'),
+    ('clearButton', 'ClearButton'), ('spinButton', 'SpinButton'), ('dropListButton', 'DropListButton'),
+    ('markIncomplete', 'AutoMarkIncomplete'), ('skipOnInput', 'SkipOnInput'),
+    ('autoMaxWidth', 'AutoMaxWidth'), ('autoMaxHeight', 'AutoMaxHeight'),
+)
+# Пишутся после размеров.
+INPUT_SIZE_BOOL_PROPS = (
+    ('horizontalStretch', 'HorizontalStretch'), ('verticalStretch', 'VerticalStretch'),
+    ('wrap', 'Wrap'), ('chooseType', 'ChooseType'), ('textEdit', 'TextEdit'),
+    ('typeDomainEnabled', 'TypeDomainEnabled'),
+)
+
+
+def emit_bool_props(lines, el, indent, props):
+    """Пишет булевы свойства, заданные в DSL значением true или false; прочие значения пропускает."""
+    for key, tag in props:
+        value = el.get(key)
+        if isinstance(value, bool):
+            lines.append(f'{indent}<{tag}>{"true" if value else "false"}</{tag}>')
+
+
 def emit_input(lines, el, name, eid, indent):
     lines.append(f'{indent}<InputField name="{name}" id="{eid}">')
     inner = f'{indent}\t'
@@ -2156,38 +2236,19 @@ def emit_input(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
 
     if el.get('titleLocation'):
-        loc_map = {'none': 'None', 'left': 'Left', 'right': 'Right', 'top': 'Top', 'bottom': 'Bottom'}
-        loc = loc_map.get(str(el['titleLocation']), str(el['titleLocation']))
-        lines.append(f'{inner}<TitleLocation>{loc}</TitleLocation>')
+        lines.append(f'{inner}<TitleLocation>{title_location_value(el["titleLocation"])}</TitleLocation>')
 
-    if el.get('multiLine') is True:
-        lines.append(f'{inner}<MultiLine>true</MultiLine>')
-    if el.get('passwordMode') is True:
-        lines.append(f'{inner}<PasswordMode>true</PasswordMode>')
-    if el.get('choiceButton') is False:
-        lines.append(f'{inner}<ChoiceButton>false</ChoiceButton>')
-    if el.get('clearButton') is True:
-        lines.append(f'{inner}<ClearButton>true</ClearButton>')
-    if el.get('spinButton') is True:
-        lines.append(f'{inner}<SpinButton>true</SpinButton>')
-    if el.get('dropListButton') is True:
-        lines.append(f'{inner}<DropListButton>true</DropListButton>')
-    if el.get('markIncomplete') is True:
-        lines.append(f'{inner}<AutoMarkIncomplete>true</AutoMarkIncomplete>')
-    if el.get('skipOnInput') is True:
-        lines.append(f'{inner}<SkipOnInput>true</SkipOnInput>')
-    if el.get('autoMaxWidth') is False:
-        lines.append(f'{inner}<AutoMaxWidth>false</AutoMaxWidth>')
-    if el.get('autoMaxHeight') is False:
-        lines.append(f'{inner}<AutoMaxHeight>false</AutoMaxHeight>')
+    if el.get('editMode'):
+        lines.append(f'{inner}<EditMode>{el["editMode"]}</EditMode>')
+
+    # Булевы свойства пишутся с тем значением, что задано в DSL: у колонки таблицы и у поля
+    # умолчания платформы разные, и явное значение из выгрузки иначе терялось.
+    emit_bool_props(lines, el, inner, INPUT_BOOL_PROPS)
     if el.get('width'):
         lines.append(f'{inner}<Width>{el["width"]}</Width>')
     if el.get('height'):
         lines.append(f'{inner}<Height>{el["height"]}</Height>')
-    if el.get('horizontalStretch') is True:
-        lines.append(f'{inner}<HorizontalStretch>true</HorizontalStretch>')
-    if el.get('verticalStretch') is True:
-        lines.append(f'{inner}<VerticalStretch>true</VerticalStretch>')
+    emit_bool_props(lines, el, inner, INPUT_SIZE_BOOL_PROPS)
 
     if el.get('inputHint'):
         emit_mltext(lines, inner, 'InputHint', str(el['inputHint']))
@@ -2214,7 +2275,7 @@ def emit_check(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
 
     if el.get('titleLocation'):
-        lines.append(f'{inner}<TitleLocation>{el["titleLocation"]}</TitleLocation>')
+        lines.append(f'{inner}<TitleLocation>{title_location_value(el["titleLocation"])}</TitleLocation>')
 
     # Companions
     emit_companion(lines, 'ContextMenu', f'{name}\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442\u043d\u043e\u0435\u041c\u0435\u043d\u044e', inner)
@@ -2331,10 +2392,11 @@ def emit_table(lines, el, name, eid, indent):
 
     if el.get('representation'):
         lines.append(f'{inner}<Representation>{el["representation"]}</Representation>')
-    if el.get('changeRowSet') is True:
-        lines.append(f'{inner}<ChangeRowSet>true</ChangeRowSet>')
-    if el.get('changeRowOrder') is True:
-        lines.append(f'{inner}<ChangeRowOrder>true</ChangeRowOrder>')
+    if el.get('titleLocation'):
+        lines.append(f'{inner}<TitleLocation>{title_location_value(el["titleLocation"])}</TitleLocation>')
+    # Запрет изменения состава и порядка строк (false) тоже значим: у таблицы реквизита-коллекции
+    # платформа по умолчанию их разрешает.
+    emit_bool_props(lines, el, inner, (('changeRowSet', 'ChangeRowSet'), ('changeRowOrder', 'ChangeRowOrder')))
     if el.get('height'):
         lines.append(f'{inner}<HeightInTableRows>{el["height"]}</HeightInTableRows>')
     if el.get('header') is False:
@@ -2397,6 +2459,8 @@ def emit_pages(lines, el, name, eid, indent):
     lines.append(f'{indent}<Pages name="{name}" id="{eid}">')
     inner = f'{indent}\t'
 
+    emit_title(lines, el, name, inner)
+
     if el.get('pagesRepresentation'):
         lines.append(f'{inner}<PagesRepresentation>{el["pagesRepresentation"]}</PagesRepresentation>')
 
@@ -2425,13 +2489,7 @@ def emit_page(lines, el, name, eid, indent):
     emit_common_flags(lines, el, inner)
 
     if el.get('group'):
-        orientation_map = {
-            'horizontal': 'Horizontal',
-            'vertical': 'Vertical',
-            'alwaysHorizontal': 'AlwaysHorizontal',
-            'alwaysVertical': 'AlwaysVertical',
-        }
-        orientation = orientation_map.get(str(el['group']))
+        orientation = group_orientation(str(el['group']), name)
         if orientation:
             lines.append(f'{inner}<Group>{orientation}</Group>')
 
@@ -2503,8 +2561,11 @@ def emit_picture_decoration(lines, el, name, eid, indent):
     emit_title(lines, el, name, inner)
     emit_common_flags(lines, el, inner)
 
-    if el.get('picture') or el.get('src'):
-        ref = resolve_picture_ref(el.get('src') or el.get('picture'))
+    # Ключ picture - картинка только при заданном name; без name это имя элемента, и картинкой
+    # его не считать: иначе в форму уходила ссылка на несуществующую картинку с именем элемента.
+    image = el.get('src') or (el.get('picture') if el.get('name') else None)
+    if image:
+        ref = resolve_picture_ref(image)
         lines.append(f'{inner}<Picture>')
         lines.append(f'{inner}\t<xr:Ref>{ref}</xr:Ref>')
         lines.append(f'{inner}\t<xr:LoadTransparent>true</xr:LoadTransparent>')
@@ -2572,6 +2633,8 @@ def emit_calendar(lines, el, name, eid, indent):
 def emit_command_bar(lines, el, name, eid, indent):
     lines.append(f'{indent}<CommandBar name="{name}" id="{eid}">')
     inner = f'{indent}\t'
+
+    emit_title(lines, el, name, inner)
 
     if el.get('autofill') is True:
         lines.append(f'{inner}<Autofill>true</Autofill>')
@@ -2924,16 +2987,12 @@ def _normalize_elements(defn):
     return defn
 
 
-ELEMENT_TYPE_KEYS = ("group", "input", "check", "label", "labelField", "table", "pages",
-                     "page", "button", "picture", "picField", "calendar", "cmdBar", "popup")
-
-
 def check_duplicate_elements(items, seen):
     """Первое повторяющееся имя элемента формы или пустая строка."""
     for el in items:
         if not isinstance(el, dict):
             continue
-        type_key = next((k for k in ELEMENT_TYPE_KEYS if el.get(k) is not None), None)
+        type_key = element_type_key(el)
         if type_key:
             el_name = str(el.get('name') or el.get(type_key) or '')
             if el_name:
@@ -3208,6 +3267,11 @@ def main():
 
     # Close
     lines.append('</Form>')
+
+    # Префиксы типов со своим пространством имен - в заголовок формы, перед атрибутом version.
+    if USED_TYPE_NS:
+        extra = ''.join(f' xmlns:{p}="{u}"' for p, u in sorted(USED_TYPE_NS.items()))
+        lines[1] = lines[1].replace(' version="', extra + ' version="', 1)
 
     # --- 3. Write output ---
     out_path = args.OutputPath

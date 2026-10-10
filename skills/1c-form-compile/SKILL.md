@@ -61,7 +61,7 @@ powershell.exe -NoProfile -File skills/1c-form-compile/scripts/form-compile.ps1 
 
 | DSL ключ     | XML элемент       | Значение ключа                                    |
 |--------------|-------------------|---------------------------------------------------|
-| `"group"`    | UsualGroup        | `"horizontal"` / `"vertical"` / `"alwaysHorizontal"` / `"alwaysVertical"` / `"collapsible"` |
+| `"group"`    | UsualGroup        | `"horizontal"` / `"vertical"` / `"alwaysHorizontal"` / `"alwaysVertical"` / `"horizontalIfPossible"` / `"autoScreenTypeSensitive"` / `"collapsible"` |
 | `"input"`    | InputField        | имя элемента                                      |
 | `"check"`    | CheckBoxField     | имя                                               |
 | `"label"`    | LabelDecoration   | имя (текст задается через `title`)                |
@@ -130,6 +130,10 @@ powershell.exe -NoProfile -File skills/1c-form-compile/scripts/form-compile.ps1 
 | `width` / `height` | Размер | числа |
 | `autoMaxWidth: false` | Отключить авто-ширину | для фиксированных полей |
 | `horizontalStretch: true` | Растягивать по ширине | |
+| `editMode` | Режим редактирования в таблице | `"EnterOnInput"`, `"Enter"`, `"Directly"` |
+| `wrap`, `chooseType`, `textEdit`, `typeDomainEnabled` | Перенос, выбор типа, редактирование текста, ограничение типа | `false` |
+
+Булевы ключи поля пишутся с заданным значением - и `true`, и `false`.
 
 ### Чекбокс (check)
 
@@ -148,7 +152,7 @@ powershell.exe -NoProfile -File skills/1c-form-compile/scripts/form-compile.ps1 
 
 ### Группа (group)
 
-Значение ключа задает ориентацию: `"horizontal"`, `"vertical"`, `"alwaysHorizontal"`, `"alwaysVertical"`, `"collapsible"`.
+Значение ключа задает ориентацию: `"horizontal"`, `"vertical"`, `"alwaysHorizontal"`, `"alwaysVertical"`, `"horizontalIfPossible"`, `"autoScreenTypeSensitive"`, `"collapsible"`. Неизвестное значение - предупреждение, тег `<Group>` не пишется.
 
 | Ключ | Описание |
 |------|----------|
@@ -165,8 +169,9 @@ powershell.exe -NoProfile -File skills/1c-form-compile/scripts/form-compile.ps1 
 |------|----------|
 | `path` | DataPath (привязка к реквизиту-таблице) |
 | `columns: [...]` | Колонки - массив элементов (обычно `input`) |
-| `changeRowSet: true` | Разрешить добавление/удаление строк |
-| `changeRowOrder: true` | Разрешить перемещение строк |
+| `changeRowSet` | Разрешить (`true`) или запретить (`false`) добавление/удаление строк |
+| `changeRowOrder` | Разрешить (`true`) или запретить (`false`) перемещение строк |
+| `titleLocation` | Размещение заголовка таблицы (`"none"`, `"top"`) |
 | `height` | Высота в строках таблицы |
 | `header: false` | Скрыть шапку |
 | `footer: true` | Показать подвал |

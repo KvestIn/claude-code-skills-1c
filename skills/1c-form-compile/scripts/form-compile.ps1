@@ -514,7 +514,9 @@ function New-FieldElement {
 
 	# Apply ref defaults
 	if ($isRef -and $fieldDefaults -and $fieldDefaults.ref) {
-		if ($fieldDefaults.ref.choiceButton -eq $true) { $el["choiceButton"] = $true }
+		# choiceButton=true у ссылочного поля - умолчание платформы, в форму его не пишут;
+		# переносится только выключенная кнопка.
+		if ($fieldDefaults.ref.choiceButton -eq $false) { $el["choiceButton"] = $false }
 	}
 
 	# Extra props
@@ -1807,10 +1809,36 @@ function Emit-Type {
 	X "$indent</Type>"
 }
 
+# Типы, пространство имен которых платформа объявляет прямо у тега <v8:Type>
+# (xmlns:mxl="..." и т.п.). Сборщик объявляет префикс в заголовке формы: проверка формы ищет
+# объявления там. Префиксы d5p1 платформа генерирует сама, здесь вместо них постоянные имена.
+$script:nsTypes = @{
+	"SpreadsheetDocument"              = @("mxl", "http://v8.1c.ru/8.2/data/spreadsheet")
+	"FormattedDocument"                = @("fd", "http://v8.1c.ru/8.2/data/formatted-document")
+	"TextDocument"                     = @("txt", "http://v8.1c.ru/8.1/data/txtedt")
+	"Chart"                            = @("chart", "http://v8.1c.ru/8.2/data/chart")
+	"PDFDocument"                      = @("pdfdoc", "http://v8.1c.ru/8.3/data/pdf")
+	"Planner"                          = @("pl", "http://v8.1c.ru/8.3/data/planner")
+	"GeographicalSchema"               = @("geo", "http://v8.1c.ru/8.2/data/geo")
+	"FlowchartContextType"             = @("gs", "http://v8.1c.ru/8.2/data/graphscheme")
+	"DataAnalysisTimeIntervalUnitType" = @("da", "http://v8.1c.ru/8.2/data/data-analysis")
+}
+# Префиксы nsTypes, использованные в форме: дописываются в заголовок после сборки.
+$script:usedTypeNs = @{}
+
 function Emit-SingleType {
 	param([string]$typeStr, [string]$indent)
 
 	$typeStr = Resolve-TypeStr $typeStr
+
+	# Типы со своим пространством имен; принимается и запись с префиксом (mxl:SpreadsheetDocument)
+	if ($typeStr -match '^(?:[A-Za-z][\w-]*:)?(\w+)$' -and $script:nsTypes.ContainsKey($Matches[1])) {
+		$local = $Matches[1]
+		$prefix = $script:nsTypes[$local][0]
+		$script:usedTypeNs[$prefix] = $script:nsTypes[$local][1]
+		X "$indent<v8:Type>${prefix}:$local</v8:Type>"
+		return
+	}
 
 	# boolean
 	if ($typeStr -eq "boolean") {
@@ -1968,6 +1996,19 @@ function Get-HandlerName {
 }
 
 # --- 7. Element emitters ---
+
+# Порядок важен: "group" и "picture" бывают и свойствами других элементов (ориентация страницы,
+# картинка кнопки или подменю), поэтому проверяются последними. Иначе страница с ориентацией
+# собиралась обычной группой с именем "vertical", а подменю с картинкой - декорацией-картинкой.
+$script:elementTypeKeys = @("input","check","label","labelField","table","pages","page","button","picField","calendar","cmdBar","popup","searchString","viewStatus","searchControl","group","picture")
+
+function Get-ElementTypeKey {
+	param($el)
+	foreach ($key in $script:elementTypeKeys) {
+		if ($null -ne $el.$key) { return $key }
+	}
+	return $null
+}
 
 function Get-ElementName {
 	param($el, [string]$typeKey)
@@ -2127,15 +2168,7 @@ function Emit-Element {
 	param($el, [string]$indent)
 
 	# Determine element type from key
-	$typeKey = $null
-	$xmlTag = $null
-
-	foreach ($key in @("group","input","check","label","labelField","table","pages","page","button","picture","picField","calendar","cmdBar","popup","searchString","viewStatus","searchControl")) {
-		if ($el.$key -ne $null) {
-			$typeKey = $key
-			break
-		}
-	}
+	$typeKey = Get-ElementTypeKey $el
 
 	if (-not $typeKey) {
 		Write-Warning "Unknown element type, skipping"
@@ -2161,6 +2194,7 @@ function Emit-Element {
 		# input-specific
 		"multiLine"=1;"passwordMode"=1;"choiceButton"=1;"clearButton"=1
 		"spinButton"=1;"dropListButton"=1;"markIncomplete"=1;"skipOnInput"=1;"inputHint"=1
+		"editMode"=1;"wrap"=1;"chooseType"=1;"textEdit"=1;"typeDomainEnabled"=1
 		# label/hyperlink
 		"hyperlink"=1
 		# group-specific
@@ -2223,11 +2257,45 @@ function Emit-CommonFlags {
 	if ($el.readOnly -eq $true) { X "$indent<ReadOnly>true</ReadOnly>" }
 }
 
+
+# Платформа принимает размещение заголовка только с заглавной буквы: "right" в Form.xml дает исключение XDTO.
+function Get-TitleLocationValue($value) {
+	switch ("$value".ToLower()) {
+		"none"   { return "None" }
+		"left"   { return "Left" }
+		"right"  { return "Right" }
+		"top"    { return "Top" }
+		"bottom" { return "Bottom" }
+		"auto"   { return "Auto" }
+		default  { return "$value" }
+	}
+}
+
 function Emit-Title {
 	param($el, [string]$name, [string]$indent)
 	if ($el.title) {
 		Emit-MLText -tag "Title" -text $el.title -indent $indent
 	}
+}
+
+# Ориентация группы и страницы: значение DSL -> значение платформы в <Group>.
+$script:groupOrientations = [ordered]@{
+	"horizontal"              = "Horizontal"
+	"vertical"                = "Vertical"
+	"alwaysHorizontal"        = "AlwaysHorizontal"
+	"alwaysVertical"          = "AlwaysVertical"
+	"horizontalIfPossible"    = "HorizontalIfPossible"
+	"autoScreenTypeSensitive" = "AutoScreenTypeSensitive"
+}
+
+# Значение <Group> для ориентации из DSL; неизвестная ориентация - предупреждение и $null.
+function Get-GroupOrientation {
+	param([string]$value, [string]$name)
+	if ($script:groupOrientations.Contains($value)) { return $script:groupOrientations[$value] }
+	if ($value -ne "collapsible") {
+		Write-Warning "Element '$name': unknown group orientation '$value' - <Group> not written. Known: $($script:groupOrientations.Keys -join ', '), collapsible"
+	}
+	return $null
 }
 
 function Emit-Group {
@@ -2240,13 +2308,7 @@ function Emit-Group {
 
 	# Group orientation
 	$groupVal = "$($el.group)"
-	$orientation = switch ($groupVal) {
-		"horizontal"       { "Horizontal" }
-		"vertical"         { "Vertical" }
-		"alwaysHorizontal" { "AlwaysHorizontal" }
-		"alwaysVertical"   { "AlwaysVertical" }
-		default            { $null }
-	}
+	$orientation = Get-GroupOrientation $groupVal $name
 	if ($orientation) { X "$inner<Group>$orientation</Group>" }
 
 	# Behavior
@@ -2366,6 +2428,32 @@ function Emit-ChoiceParameters {
 	X "$indent</ChoiceParameters>"
 }
 
+# Булевы свойства поля ввода: ключ DSL, тег. Порядок - как писал сборщик прежде.
+$script:inputBoolProps = @(
+	@("multiLine", "MultiLine"), @("passwordMode", "PasswordMode"), @("choiceButton", "ChoiceButton"),
+	@("clearButton", "ClearButton"), @("spinButton", "SpinButton"), @("dropListButton", "DropListButton"),
+	@("markIncomplete", "AutoMarkIncomplete"), @("skipOnInput", "SkipOnInput"),
+	@("autoMaxWidth", "AutoMaxWidth"), @("autoMaxHeight", "AutoMaxHeight")
+)
+# Пишутся после размеров.
+$script:inputSizeBoolProps = @(
+	@("horizontalStretch", "HorizontalStretch"), @("verticalStretch", "VerticalStretch"),
+	@("wrap", "Wrap"), @("chooseType", "ChooseType"), @("textEdit", "TextEdit"),
+	@("typeDomainEnabled", "TypeDomainEnabled")
+)
+
+# Пишет булевы свойства, заданные в DSL значением true или false; прочие значения пропускает.
+function Emit-BoolProps {
+	param($el, [string]$indent, $props)
+	foreach ($prop in $props) {
+		$value = $el.($prop[0])
+		if ($value -is [bool]) {
+			$text = if ($value) { "true" } else { "false" }
+			X "$indent<$($prop[1])>$text</$($prop[1])>"
+		}
+	}
+}
+
 function Emit-Input {
 	param($el, [string]$name, [int]$id, [string]$indent)
 
@@ -2378,31 +2466,17 @@ function Emit-Input {
 	Emit-CommonFlags -el $el -indent $inner
 
 	if ($el.titleLocation) {
-		$loc = switch ("$($el.titleLocation)") {
-			"none"   { "None" }
-			"left"   { "Left" }
-			"right"  { "Right" }
-			"top"    { "Top" }
-			"bottom" { "Bottom" }
-			default  { "$($el.titleLocation)" }
-		}
-		X "$inner<TitleLocation>$loc</TitleLocation>"
+		X "$inner<TitleLocation>$(Get-TitleLocationValue $el.titleLocation)</TitleLocation>"
 	}
 
-	if ($el.multiLine -eq $true) { X "$inner<MultiLine>true</MultiLine>" }
-	if ($el.passwordMode -eq $true) { X "$inner<PasswordMode>true</PasswordMode>" }
-	if ($el.choiceButton -eq $false) { X "$inner<ChoiceButton>false</ChoiceButton>" }
-	if ($el.clearButton -eq $true) { X "$inner<ClearButton>true</ClearButton>" }
-	if ($el.spinButton -eq $true) { X "$inner<SpinButton>true</SpinButton>" }
-	if ($el.dropListButton -eq $true) { X "$inner<DropListButton>true</DropListButton>" }
-	if ($el.markIncomplete -eq $true) { X "$inner<AutoMarkIncomplete>true</AutoMarkIncomplete>" }
-	if ($el.skipOnInput -eq $true) { X "$inner<SkipOnInput>true</SkipOnInput>" }
-	if ($el.autoMaxWidth -eq $false) { X "$inner<AutoMaxWidth>false</AutoMaxWidth>" }
-	if ($el.autoMaxHeight -eq $false) { X "$inner<AutoMaxHeight>false</AutoMaxHeight>" }
+	if ($el.editMode) { X "$inner<EditMode>$($el.editMode)</EditMode>" }
+
+	# Булевы свойства пишутся с тем значением, что задано в DSL: у колонки таблицы и у поля
+	# умолчания платформы разные, и явное значение из выгрузки иначе терялось.
+	Emit-BoolProps -el $el -indent $inner -props $script:inputBoolProps
 	if ($el.width) { X "$inner<Width>$($el.width)</Width>" }
 	if ($el.height) { X "$inner<Height>$($el.height)</Height>" }
-	if ($el.horizontalStretch -eq $true) { X "$inner<HorizontalStretch>true</HorizontalStretch>" }
-	if ($el.verticalStretch -eq $true) { X "$inner<VerticalStretch>true</VerticalStretch>" }
+	Emit-BoolProps -el $el -indent $inner -props $script:inputSizeBoolProps
 
 	if ($el.inputHint) {
 		Emit-MLText -tag "InputHint" -text "$($el.inputHint)" -indent $inner
@@ -2431,7 +2505,7 @@ function Emit-Check {
 	Emit-CommonFlags -el $el -indent $inner
 
 	if ($el.titleLocation) {
-		X "$inner<TitleLocation>$($el.titleLocation)</TitleLocation>"
+		X "$inner<TitleLocation>$(Get-TitleLocationValue $el.titleLocation)</TitleLocation>"
 	}
 
 	# Companions
@@ -2514,8 +2588,12 @@ function Emit-Table {
 	if ($el.representation) {
 		X "$inner<Representation>$($el.representation)</Representation>"
 	}
-	if ($el.changeRowSet -eq $true) { X "$inner<ChangeRowSet>true</ChangeRowSet>" }
-	if ($el.changeRowOrder -eq $true) { X "$inner<ChangeRowOrder>true</ChangeRowOrder>" }
+	if ($el.titleLocation) {
+		X "$inner<TitleLocation>$(Get-TitleLocationValue $el.titleLocation)</TitleLocation>"
+	}
+	# Запрет изменения состава и порядка строк (false) тоже значим: у таблицы реквизита-коллекции
+	# платформа по умолчанию их разрешает.
+	Emit-BoolProps -el $el -indent $inner -props @(@("changeRowSet", "ChangeRowSet"), @("changeRowOrder", "ChangeRowOrder"))
 	if ($el.height) { X "$inner<HeightInTableRows>$($el.height)</HeightInTableRows>" }
 	if ($el.header -eq $false) { X "$inner<Header>false</Header>" }
 	if ($el.footer -eq $true) { X "$inner<Footer>true</Footer>" }
@@ -2574,6 +2652,8 @@ function Emit-Pages {
 	X "$indent<Pages name=`"$name`" id=`"$id`">"
 	$inner = "$indent`t"
 
+	Emit-Title -el $el -name $name -indent $inner
+
 	if ($el.pagesRepresentation) {
 		X "$inner<PagesRepresentation>$($el.pagesRepresentation)</PagesRepresentation>"
 	}
@@ -2607,13 +2687,7 @@ function Emit-Page {
 	Emit-CommonFlags -el $el -indent $inner
 
 	if ($el.group) {
-		$orientation = switch ("$($el.group)") {
-			"horizontal"       { "Horizontal" }
-			"vertical"         { "Vertical" }
-			"alwaysHorizontal" { "AlwaysHorizontal" }
-			"alwaysVertical"   { "AlwaysVertical" }
-			default            { $null }
-		}
+		$orientation = Get-GroupOrientation "$($el.group)" $name
 		if ($orientation) { X "$inner<Group>$orientation</Group>" }
 	}
 
@@ -2700,8 +2774,11 @@ function Emit-PictureDecoration {
 	Emit-Title -el $el -name $name -indent $inner
 	Emit-CommonFlags -el $el -indent $inner
 
-	if ($el.picture -or $el.src) {
-		$ref = if ($el.src) { Resolve-PictureRef $el.src } else { Resolve-PictureRef $el.picture }
+	# Ключ picture - картинка только при заданном name; без name это имя элемента, и картинкой
+	# его не считать: иначе в форму уходила ссылка на несуществующую картинку с именем элемента.
+	$image = if ($el.src) { $el.src } elseif ($el.name) { $el.picture } else { $null }
+	if ($image) {
+		$ref = Resolve-PictureRef $image
 		X "$inner<Picture>"
 		X "$inner`t<xr:Ref>$ref</xr:Ref>"
 		X "$inner`t<xr:LoadTransparent>true</xr:LoadTransparent>"
@@ -2769,6 +2846,8 @@ function Emit-CommandBar {
 
 	X "$indent<CommandBar name=`"$name`" id=`"$id`">"
 	$inner = "$indent`t"
+
+	Emit-Title -el $el -name $name -indent $inner
 
 	if ($el.autofill -eq $true) { X "$inner<Autofill>true</Autofill>" }
 
@@ -3063,10 +3142,7 @@ function Test-ElementNames {
 	param($items)
 	foreach ($el in @($items)) {
 		if ($null -eq $el) { continue }
-		$typeKey = $null
-		foreach ($key in @("group","input","check","label","labelField","table","pages","page","button","picture","picField","calendar","cmdBar","popup","searchString","viewStatus","searchControl")) {
-			if ($null -ne $el.$key) { $typeKey = $key; break }
-		}
+		$typeKey = Get-ElementTypeKey $el
 		if ($typeKey) {
 			$elName = Get-ElementName -el $el -typeKey $typeKey
 			if ($elName) {
@@ -3213,6 +3289,14 @@ Emit-Commands -cmds $def.commands -indent "`t"
 
 # 12j. Close
 X '</Form>'
+
+# Префиксы типов со своим пространством имен - в заголовок формы, перед атрибутом version.
+if ($script:usedTypeNs.Count -gt 0) {
+	$extra = ($script:usedTypeNs.Keys | Sort-Object | ForEach-Object { " xmlns:$_=" + [char]34 + $script:usedTypeNs[$_] + [char]34 }) -join ""
+	$text = $script:xml.ToString()
+	$pos = $text.IndexOf(' version="', $text.IndexOf('<Form '))
+	$script:xml = New-Object System.Text.StringBuilder ($text.Insert($pos, $extra))
+}
 
 # --- 13. Write output ---
 
