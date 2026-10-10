@@ -23,14 +23,15 @@
 						</InputField>
 					</ChildItems>
 				</Page>
-				<UsualGroup name="horizontalIfPossible" id="8">
+				<Page name="Шаг2" id="8">
 					<Title>
 						<v8:item>
 							<v8:lang>ru</v8:lang>
 							<v8:content>Результат</v8:content>
 						</v8:item>
 					</Title>
-					<ExtendedTooltip name="horizontalIfPossibleРасширеннаяПодсказка" id="9"/>
+					<Group>HorizontalIfPossible</Group>
+					<ExtendedTooltip name="Шаг2РасширеннаяПодсказка" id="9"/>
 					<ChildItems>
 						<InputField name="Итог" id="10">
 							<DataPath>Итог</DataPath>
@@ -39,10 +40,11 @@
 							<ExtendedTooltip name="ИтогРасширеннаяПодсказка" id="12"/>
 						</InputField>
 					</ChildItems>
-				</UsualGroup>
+				</Page>
 			</ChildItems>
 		</Pages>
 		<UsualGroup name="Навигация" id="13">
+			<Group>HorizontalIfPossible</Group>
 			<ExtendedTooltip name="НавигацияРасширеннаяПодсказка" id="14"/>
 			<ChildItems>
 				<Button name="Назад" id="15">

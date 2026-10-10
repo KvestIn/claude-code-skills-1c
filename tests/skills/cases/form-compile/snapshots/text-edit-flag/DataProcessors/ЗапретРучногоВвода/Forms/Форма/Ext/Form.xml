@@ -28,6 +28,7 @@
 					<v8:content>Только через выбор</v8:content>
 				</v8:item>
 			</Title>
+			<TextEdit>false</TextEdit>
 			<ContextMenu name="ПолеБезРучногоВводаКонтекстноеМеню" id="5"/>
 			<ExtendedTooltip name="ПолеБезРучногоВводаРасширеннаяПодсказка" id="6"/>
 		</InputField>

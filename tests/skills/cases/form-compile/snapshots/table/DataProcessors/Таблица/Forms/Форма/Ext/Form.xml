@@ -11,6 +11,7 @@
 	<ChildItems>
 		<Table name="Данные" id="1">
 			<DataPath>Данные</DataPath>
+			<TitleLocation>Top</TitleLocation>
 			<ChangeRowSet>true</ChangeRowSet>
 			<HeightInTableRows>80</HeightInTableRows>
 			<ContextMenu name="ДанныеКонтекстноеМеню" id="2"/>

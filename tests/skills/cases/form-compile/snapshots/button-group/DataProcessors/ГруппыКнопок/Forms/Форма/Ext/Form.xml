@@ -16,7 +16,7 @@
 					<DefaultButton>true</DefaultButton>
 					<ExtendedTooltip name="ВыполнитьРасширеннаяПодсказка" id="3"/>
 				</Button>
-				<PictureDecoration name="StdPicture.Print" id="4">
+				<Popup name="ПодменюПечать" id="4">
 					<Title>
 						<v8:item>
 							<v8:lang>ru</v8:lang>
@@ -27,9 +27,14 @@
 						<xr:Ref>StdPicture.Print</xr:Ref>
 						<xr:LoadTransparent>true</xr:LoadTransparent>
 					</Picture>
-					<ContextMenu name="StdPicture.PrintКонтекстноеМеню" id="5"/>
-					<ExtendedTooltip name="StdPicture.PrintРасширеннаяПодсказка" id="6"/>
-				</PictureDecoration>
+					<Representation>PictureAndText</Representation>
+					<ChildItems>
+						<Button name="ПечатьСчёта" id="5">
+							<CommandName>Form.Command.Выполнить</CommandName>
+							<ExtendedTooltip name="ПечатьСчётаРасширеннаяПодсказка" id="6"/>
+						</Button>
+					</ChildItems>
+				</Popup>
 			</ChildItems>
 		</CommandBar>
 	</ChildItems>

@@ -17,6 +17,10 @@
 					<v8:content>Обычное поле</v8:content>
 				</v8:item>
 			</Title>
+			<EditMode>EnterOnInput</EditMode>
+			<MultiLine>false</MultiLine>
+			<HorizontalStretch>false</HorizontalStretch>
+			<VerticalStretch>false</VerticalStretch>
 			<ContextMenu name="ОбычноеПолеКонтекстноеМеню" id="2"/>
 			<ExtendedTooltip name="ОбычноеПолеРасширеннаяПодсказка" id="3"/>
 		</InputField>
@@ -36,6 +40,8 @@
 			</Title>
 			<MultiLine>true</MultiLine>
 			<Height>5</Height>
+			<Wrap>false</Wrap>
+			<ChooseType>false</ChooseType>
 			<ContextMenu name="МногострочноеПолеКонтекстноеМеню" id="8"/>
 			<ExtendedTooltip name="МногострочноеПолеРасширеннаяПодсказка" id="9"/>
 		</InputField>
@@ -70,8 +76,10 @@
 					<v8:content>Выбор</v8:content>
 				</v8:item>
 			</Title>
+			<ChoiceButton>true</ChoiceButton>
 			<ClearButton>true</ClearButton>
 			<SpinButton>true</SpinButton>
+			<DropListButton>false</DropListButton>
 			<ContextMenu name="ПолеСКнопкамиКонтекстноеМеню" id="17"/>
 			<ExtendedTooltip name="ПолеСКнопкамиРасширеннаяПодсказка" id="18"/>
 		</InputField>
@@ -94,6 +102,7 @@
 					<v8:content>Подсказка</v8:content>
 				</v8:item>
 			</Title>
+			<AutoMarkIncomplete>false</AutoMarkIncomplete>
 			<InputHint>
 				<v8:item>
 					<v8:lang>ru</v8:lang>
@@ -237,7 +246,7 @@
 					<v8:content>Сверху</v8:content>
 				</v8:item>
 			</Title>
-			<TitleLocation>top</TitleLocation>
+			<TitleLocation>Top</TitleLocation>
 			<ContextMenu name="ФлагЯвныйКонтекстноеМеню" id="38"/>
 			<ExtendedTooltip name="ФлагЯвныйРасширеннаяПодсказка" id="39"/>
 		</CheckBoxField>
@@ -260,6 +269,7 @@
 					<v8:content>Ограничение типов</v8:content>
 				</v8:item>
 			</Title>
+			<TypeDomainEnabled>false</TypeDomainEnabled>
 			<ContextMenu name="ПолеСоставноеКонтекстноеМеню" id="44"/>
 			<ExtendedTooltip name="ПолеСоставноеРасширеннаяПодсказка" id="45"/>
 		</InputField>
