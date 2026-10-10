@@ -1,6 +1,6 @@
 ---
 name: 1c-role-validate
-description: Валидация роли 1С. Используй после создания или модификации роли для проверки корректности
+description: "Валидация роли 1С - поиск ошибок в Rights.xml. Используй после создания или модификации роли и когда просят проверить роль на ошибки. Посмотреть, какие права дает роль - 1c-role-info"
 argument-hint: <RightsPath> [-IndexPath index.json] [-Detailed] [-MaxErrors 30]
 allowed-tools:
   - Bash

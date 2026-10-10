@@ -1,6 +1,6 @@
 ---
 name: 1c-meta-validate
-description: Валидация объекта метаданных 1С. Используй после создания или модификации объекта конфигурации для проверки корректности
+description: "Валидация объекта метаданных 1С - поиск ошибок в XML объекта. Используй после создания или модификации объекта конфигурации и когда просят проверить объект на ошибки. Посмотреть реквизиты и структуру - 1c-meta-info"
 argument-hint: <ObjectPath> [-IndexPath index.json] [-Detailed] [-MaxErrors 30] - pipe-separated paths for batch
 allowed-tools:
   - Bash

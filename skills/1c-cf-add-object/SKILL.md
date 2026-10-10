@@ -1,6 +1,6 @@
 ---
 name: 1c-cf-add-object
-description: "Добавить объект метаданных в конфигурацию 1С с формой, подсистемой и валидацией. Workflow: meta-compile → cf-edit → subsystem-edit → form-add → form-compile → validate."
+description: "Добавить объект метаданных в конфигурацию 1С под ключ - объект, подсистема, форма и валидация за один проход. Workflow: meta-compile -> cf-edit -> subsystem-edit -> form-add -> form-compile -> validate. Только сам объект без формы и подсистемы - 1c-meta-compile"
 argument-hint: "<ObjectType.ObjectName> в конфигурацию <ConfigPath>"
 allowed-tools:
   - Bash

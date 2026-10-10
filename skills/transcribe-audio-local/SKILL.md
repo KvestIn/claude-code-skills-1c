@@ -1,6 +1,6 @@
 ---
 name: transcribe-audio-local
-description: "Локальная транскрибация аудиофайлов без отправки в облако. Используй когда пользователь просит транскрибировать запись, расшифровать аудио, сделать конспект встречи, преобразовать речь в текст. Только для аудио (m4a/mp3/wav/ogg/flac/aac/wma/opus). Движок: faster-whisper CUDA + опц. диаризация sherpa-onnx GPU (CUDA, RTF ~0.24). Поддерживает разделение по спикерам."
+description: "Локальная транскрибация аудиофайлов без отправки в облако. Используй когда пользователь явно просит расшифровать аудио локально, без облака, или запись конфиденциальная. Только для аудио (m4a/mp3/wav/ogg/flac/aac/wma/opus). Движок: faster-whisper CUDA + опц. диаризация sherpa-onnx GPU. В остальных случаях и для видео - transcribe"
 argument-hint: "<AudioPath> [--output-dir DIR] [--diarize] [--num-speakers N] [--language ru]"
 allowed-tools:
   - Bash

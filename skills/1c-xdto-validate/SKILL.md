@@ -1,6 +1,6 @@
 ---
 name: 1c-xdto-validate
-description: Валидация пакета XDTO 1С. Используй после создания или модификации пакета XDTO для проверки корректности
+description: "Валидация пакета XDTO 1С - поиск ошибок в пакете. Используй после создания или модификации пакета XDTO и когда просят проверить пакет на ошибки. Посмотреть типы и свойства пакета - 1c-xdto-info"
 argument-hint: <PackagePath> [-ConfigDir <каталог>] [-Detailed] [-MaxErrors N] [-OutFile <файл>]
 allowed-tools:
   - Bash
