@@ -466,6 +466,7 @@ def main():
     parser.add_argument("-ConfigPath", required=True)
     parser.add_argument("-Object", required=True)
     parser.add_argument("-BorrowMainAttribute", nargs="?", const="Form", default=None)
+    parser.add_argument("-Attributes", default=None)
     args = parser.parse_args()
 
     # --- 1. Resolve paths ---
@@ -1119,7 +1120,10 @@ def main():
         # Step 1: Collect DataPaths (Form mode) or take all (All mode)
         first_level_names = None
         deep_paths = []
-        if mode == "Form":
+        if mode == "Names":
+            first_level_names = {n: True for n in form_name}
+            info(f"  Mode Names: {', '.join(form_name)}")
+        elif mode == "Form":
             src_form_xml_path = os.path.join(cfg_dir, dir_name, obj_name, "Forms", form_name, "Ext", "Form.xml")
             if not os.path.isfile(src_form_xml_path):
                 print(f"Source Form.xml not found: {src_form_xml_path}", file=sys.stderr)
@@ -1769,6 +1773,13 @@ def main():
                 borrow_main_attribute(type_name, obj_name, form_name, borrow_main_attribute_mode)
         else:
             # --- Object borrowing ---
+            attr_names = [n.strip() for n in (args.Attributes or "").split(",") if n.strip()]
+            if attr_names and test_object_borrowed(type_name, obj_name):
+                # объект уже в расширении: его XML не пересоздается, иначе пропадут добавленные свойства
+                # (RegisterRecords, свои реквизиты); добавляются только недостающие реквизиты
+                borrow_main_attribute(type_name, obj_name, attr_names, "Names")
+                borrowed_count += 1
+                continue
             info(f"Borrowing {type_name}.{obj_name}...")
 
             src = read_source_object(type_name, obj_name)
@@ -1787,6 +1798,8 @@ def main():
 
             borrowed_files.append(target_file)
             borrowed_count += 1
+            if attr_names:
+                borrow_main_attribute(type_name, obj_name, attr_names, "Names")
 
     # --- Save modified Configuration.xml ---
     save_xml_bom(tree, ext_resolved)

@@ -76,6 +76,8 @@ Batch через `;;` во всех операциях. Подробный си�
 | `set-owners` / `set-registerRecords` / `set-basedOn` / `set-inputByString` | Замена всего списка | `"Catalog.Орг ;; Catalog.Контр"` |
 | `remove-owner` / `remove-registerRecord` / ... | Удаление из списка | `"Catalog.Контрагенты"` |
 
+Объекту, заимствованному в расширение, списки задаются так же: элемента свойства у него нет, навык его создает. Так в движения типового документа добавляется свой регистр расширения: `-ObjectPath ext/Documents/<Документ>.xml -Operation set-registerRecords -Value "AccumulationRegister.<СвойРегистр>"`.
+
 ### JSON DSL - [json-dsl.md](json-dsl.md)
 
 Для комбинированных операций (add + remove + modify в одном файле), синонимы ключей/типов, таблица поддерживаемых объектов.

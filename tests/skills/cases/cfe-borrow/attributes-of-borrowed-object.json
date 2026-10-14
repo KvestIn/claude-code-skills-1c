@@ -1,0 +1,22 @@
+{
+  "name": "Заимствование реквизита и табличной части уже заимствованного документа (-Attributes)",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": { "type": "Document", "name": "ПриходТоваров",
+                 "attributes": ["Склад: String(50)", "Комментарий: String(200)"],
+                 "tabularSections": [{ "name": "Товары", "attributes": ["Товар: String(100)", "Количество: Number(15,3)"] }] },
+      "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" }
+    },
+    {
+      "script": "cfe-init/scripts/cfe-init",
+      "args": { "-Name": "Тест", "-OutputDir": "{workDir}/ext", "-ConfigPath": "{workDir}" }
+    },
+    {
+      "script": "cfe-borrow/scripts/cfe-borrow",
+      "args": { "-ExtensionPath": "{workDir}/ext", "-ConfigPath": "{workDir}", "-Object": "Document.ПриходТоваров" }
+    }
+  ],
+  "params": { "extensionPath": "ext", "object": "Document.ПриходТоваров" },
+  "args_extra": ["-Attributes", "Склад,Товары"]
+}

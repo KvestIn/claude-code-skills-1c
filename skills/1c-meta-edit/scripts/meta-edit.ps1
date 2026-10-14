@@ -2288,7 +2288,14 @@ function Modify-Properties($propsDef) {
 			# выгрузки, где отсутствующее свойство означает значение по умолчанию.
 			# Порядок внутри Properties платформе безразличен - замерено на 8.5.
 			if ($script:complexPropertyMap.ContainsKey($propName)) {
-				Warn "Property '$propName' not found in Properties"
+				# списка нет у заимствованного в расширение объекта - Set-ComplexProperty его создает
+				$valuesList = @()
+				if ($propValue -is [array]) {
+					$valuesList = @($propValue | ForEach-Object { "$_" })
+				} else {
+					$valuesList = @("$propValue" -split ';;' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+				}
+				Set-ComplexProperty $propName $valuesList
 				return
 			}
 			$newIndent = Get-ChildIndent $propertiesEl
@@ -2677,6 +2684,19 @@ function Find-PropertyElement([string]$propName) {
 	return $null
 }
 
+# Элемент сложного свойства (RegisterRecords, BasedOn...) или новый пустой в конце Properties. У объекта,
+# заимствованного в расширение, в Properties только ObjectBelonging, Name и ExtendedConfigurationObject: без
+# создания элемента set-registerRecords молча ничего не делал (14.10.2026, свой регистр в движениях
+# заимствованного документа; загрузка в базы УТ и УНФ подтвердила, что такой элемент платформа принимает).
+function Ensure-PropertyElement([string]$propName) {
+	$propEl = Find-PropertyElement $propName
+	if ($propEl) { return $propEl }
+	$nodes = Import-Fragment "<$propName/>"
+	Insert-BeforeElement $script:propertiesEl $nodes[0] $null (Get-ChildIndent $script:propertiesEl)
+	Info "Created property element: $propName"
+	return (Find-PropertyElement $propName)
+}
+
 function Get-ComplexPropertyValues([System.Xml.XmlElement]$propEl) {
 	$values = @()
 	foreach ($child in $propEl.ChildNodes) {
@@ -2691,11 +2711,7 @@ function Add-ComplexPropertyItem([string]$propertyName, [string[]]$values) {
 	$mapEntry = $script:complexPropertyMap[$propertyName]
 	if (-not $mapEntry) { Warn "Unknown complex property: $propertyName"; return }
 
-	$propEl = Find-PropertyElement $propertyName
-	if (-not $propEl) {
-		Warn "Property element '$propertyName' not found in Properties"
-		return
-	}
+	$propEl = Ensure-PropertyElement $propertyName
 
 	# Get existing values to check duplicates
 	$existing = Get-ComplexPropertyValues $propEl
@@ -2775,11 +2791,7 @@ function Set-ComplexProperty([string]$propertyName, [string[]]$values) {
 	$mapEntry = $script:complexPropertyMap[$propertyName]
 	if (-not $mapEntry) { Warn "Unknown complex property: $propertyName"; return }
 
-	$propEl = Find-PropertyElement $propertyName
-	if (-not $propEl) {
-		Warn "Property element '$propertyName' not found in Properties"
-		return
-	}
+	$propEl = Ensure-PropertyElement $propertyName
 
 	$indent = Get-ChildIndent $script:propertiesEl
 	$childIndent = "$indent`t"

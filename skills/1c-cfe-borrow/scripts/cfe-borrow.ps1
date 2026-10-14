@@ -4,7 +4,8 @@ param(
 	[Parameter(Mandatory)][string]$ExtensionPath,
 	[Parameter(Mandatory)][string]$ConfigPath,
 	[Parameter(Mandatory)][string]$Object,
-	[string]$BorrowMainAttribute
+	[string]$BorrowMainAttribute,
+	[string]$Attributes
 )
 
 $ErrorActionPreference = "Stop"
@@ -1546,7 +1547,7 @@ function Merge-AttributesIntoObject {
 
 # --- 11h. Borrow-MainAttribute orchestrator ---
 function Borrow-MainAttribute {
-	param([string]$typeName, [string]$objName, [string]$formName, [string]$mode)
+	param([string]$typeName, [string]$objName, [string]$formName, [string]$mode, [string[]]$names = @())
 
 	$dirName = $childTypeDirMap[$typeName]
 	Info "Borrowing main attribute for ${typeName}.${objName} (mode: $mode)..."
@@ -1554,7 +1555,11 @@ function Borrow-MainAttribute {
 	# Step 1: Collect DataPaths (Form mode) or take all (All mode)
 	$firstLevelNames = $null
 	$deepPaths = @()
-	if ($mode -eq "Form") {
+	if ($mode -eq "Names") {
+		$firstLevelNames = @{}
+		foreach ($n in $names) { $firstLevelNames[$n] = $true }
+		Info "  Mode Names: $($names -join ', ')"
+	} elseif ($mode -eq "Form") {
 		$srcFormXmlPath = Join-Path (Join-Path (Join-Path (Join-Path (Join-Path $cfgDir $dirName) $objName) "Forms") $formName) "Ext/Form.xml"
 		if (-not (Test-Path $srcFormXmlPath)) {
 			Write-Error "Source Form.xml not found: $srcFormXmlPath"
@@ -1961,6 +1966,15 @@ foreach ($item in $items) {
 		}
 	} else {
 		# --- Object borrowing (existing logic) ---
+		$attrNames = @()
+		if ($Attributes) { $attrNames = @($Attributes.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+		if ($attrNames.Count -gt 0 -and (Test-ObjectBorrowed $typeName $objName)) {
+			# объект уже в расширении: его XML не пересоздается, иначе пропадут добавленные свойства
+			# (RegisterRecords, свои реквизиты); добавляются только недостающие реквизиты
+			Borrow-MainAttribute $typeName $objName "" "Names" $attrNames
+			$borrowedCount++
+			continue
+		}
 		Info "Borrowing ${typeName}.${objName}..."
 
 		$src = Read-SourceObject $typeName $objName
@@ -1982,6 +1996,9 @@ foreach ($item in $items) {
 
 		$script:borrowedFiles += $targetFile
 		$borrowedCount++
+		if ($attrNames.Count -gt 0) {
+			Borrow-MainAttribute $typeName $objName "" "Names" $attrNames
+		}
 	}
 }
 

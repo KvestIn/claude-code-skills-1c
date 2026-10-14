@@ -2187,7 +2187,12 @@ def modify_properties(props_def):
             # из выгрузки, где отсутствующее свойство означает значение по умолчанию.
             # Порядок внутри Properties платформе безразличен - замерено на 8.5.
             if prop_name in complex_property_map:
-                warn(f"Property '{prop_name}' not found in Properties")
+                # списка нет у заимствованного в расширение объекта - set_complex_property его создает
+                if isinstance(prop_value, list):
+                    values_list = [str(v) for v in prop_value]
+                else:
+                    values_list = [v.strip() for v in ps_str(prop_value).split(";;") if v.strip()]
+                set_complex_property(prop_name, values_list)
                 continue
             new_indent = get_child_indent(properties_el)
             if prop_name in STRUCTURAL_PROPS:
@@ -2520,6 +2525,20 @@ def find_property_element(prop_name):
     return None
 
 
+def ensure_property_element(prop_name):
+    """Элемент сложного свойства (RegisterRecords, BasedOn...) или новый пустой в конце Properties. У объекта,
+    заимствованного в расширение, в Properties только ObjectBelonging, Name и ExtendedConfigurationObject: без
+    создания элемента set-registerRecords молча ничего не делал (14.10.2026, свой регистр в движениях
+    заимствованного документа; загрузка в базы УТ и УНФ подтвердила, что такой элемент платформа принимает)."""
+    prop_el = find_property_element(prop_name)
+    if prop_el is not None:
+        return prop_el
+    nodes = import_fragment(f"<{prop_name}/>")
+    insert_before_element(properties_el, nodes[0], None, get_child_indent(properties_el))
+    info(f"Created property element: {prop_name}")
+    return find_property_element(prop_name)
+
+
 def get_complex_property_values(prop_el):
     values = []
     for child in prop_el:
@@ -2535,10 +2554,7 @@ def add_complex_property_item(property_name, values):
         warn(f"Unknown complex property: {property_name}")
         return
 
-    prop_el = find_property_element(property_name)
-    if prop_el is None:
-        warn(f"Property element '{property_name}' not found in Properties")
-        return
+    prop_el = ensure_property_element(property_name)
 
     # Get existing values to check duplicates
     existing = get_complex_property_values(prop_el)
@@ -2604,10 +2620,7 @@ def set_complex_property(property_name, values):
         warn(f"Unknown complex property: {property_name}")
         return
 
-    prop_el = find_property_element(property_name)
-    if prop_el is None:
-        warn(f"Property element '{property_name}' not found in Properties")
-        return
+    prop_el = ensure_property_element(property_name)
 
     indent = get_child_indent(properties_el)
     child_indent = f"{indent}\t"
