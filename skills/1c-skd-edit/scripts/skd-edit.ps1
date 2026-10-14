@@ -214,6 +214,33 @@ function Resolve-QueryValue {
 	exit 1
 }
 
+# set-query: a file path without @ used to be written into <query> as the query text, and
+# "Имя: ВЫБРАТЬ ..." (the add-dataSet shorthand) kept the "Имя:" prefix - the schema loaded, the report
+# did not work (local model runs, 2026-10-15). A single-line value naming an existing file is read as
+# @file; a path-like value without such a file and the dataset-name prefix are refused.
+function Get-CheckedSetQueryValue {
+	param([string]$val, [string]$baseDir)
+	if ($val.StartsWith("@") -or $val.Trim().Contains("`n")) { return $val }
+	$s = $val.Trim()
+	if ($s -match '^([\wА-Яа-яЁё]+)\s*:\s*(ВЫБРАТЬ|SELECT|@)') {
+		$n = $Matches[1]
+		Write-Error "set-query: the value starts with `"$($n):`" - that is the add-dataSet shorthand. To replace the query of dataset `"$n`" pass -DataSet `"$n`" and the query text without the prefix"
+		exit 1
+	}
+	$ext = @('.sql', '.txt', '.query', '.bsl')
+	$looksLikePath = ($ext | Where-Object { $s.ToLower().EndsWith($_) }) -or
+		(($s.Contains('/') -or $s.Contains('\')) -and ($s -notmatch '(?i)\b(ВЫБРАТЬ|SELECT)\b'))
+	if (-not $looksLikePath) { return $val }
+	if ([System.IO.Path]::IsPathRooted($s)) { $candidates = @($s) }
+	else { $candidates = @((Join-Path $baseDir $s), (Join-Path (Get-Location).Path $s)) }
+	if ($candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }) {
+		[Console]::Error.WriteLine("[WARN] set-query: `"$s`" is a file - reading the query from it (write @$s next time)")
+		return "@$s"
+	}
+	Write-Error "set-query: `"$s`" looks like a file path, but no such file exists - the path would have been written into the schema as the query text. Pass the query text itself or @path/to/existing/file.sql"
+	exit 1
+}
+
 $script:queryBaseDir = [System.IO.Path]::GetDirectoryName($resolvedPath)
 
 # --- 2. Type system (copied from skd-compile) ---
@@ -2430,7 +2457,12 @@ switch ($Operation) {
 		}
 
 		# InnerText setter handles XML escaping automatically
-		$queryEl.InnerText = Resolve-QueryValue $Value $script:queryBaseDir
+		$queryEl.InnerText = Resolve-QueryValue (Get-CheckedSetQueryValue $Value $script:queryBaseDir) $script:queryBaseDir
+		if ($queryEl.InnerText -notmatch '(?i)\b(ВЫБРАТЬ|SELECT)\b') {
+			$head = $queryEl.InnerText.Substring(0, [Math]::Min(120, $queryEl.InnerText.Length))
+			Write-Error "set-query: the value is not a query text (no ВЫБРАТЬ/SELECT): '$head'. Pass the query text itself or @path/to/file.sql"
+			exit 1
+		}
 
 		Write-Host "[OK] Query replaced in dataset `"$dsName`""
 	}

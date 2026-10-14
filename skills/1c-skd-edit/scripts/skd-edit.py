@@ -297,6 +297,37 @@ def resolve_query_value(val, base_dir):
     sys.exit(1)
 
 
+QUERY_FILE_EXT = (".sql", ".txt", ".query", ".bsl")
+
+
+def checked_set_query_value(val, base_dir):
+    """set-query: a file path without @ used to be written into <query> as the query text, and
+    "Имя: ВЫБРАТЬ ..." (the add-dataSet shorthand) kept the "Имя:" prefix - the schema loaded, the report
+    did not work (local model runs, 2026-10-15). A single-line value naming an existing file is read as
+    @file; a path-like value without such a file and the dataset-name prefix are refused."""
+    if val.startswith("@") or "\n" in val.strip():
+        return val
+    s = val.strip()
+    m = re.match(r"^([\wА-Яа-яЁё]+)\s*:\s*(ВЫБРАТЬ|SELECT|@)", s, re.I)
+    if m:
+        print(f'set-query: the value starts with "{m.group(1)}:" - that is the add-dataSet shorthand. To replace '
+              f'the query of dataset "{m.group(1)}" pass -DataSet "{m.group(1)}" and the query text without the prefix',
+              file=sys.stderr)
+        sys.exit(1)
+    looks_like_path = (s.lower().endswith(QUERY_FILE_EXT)
+                       or (("/" in s or "\\" in s) and not re.search(r"(?i)\b(ВЫБРАТЬ|SELECT)\b", s)))
+    if not looks_like_path:
+        return val
+    candidates = [s] if os.path.isabs(s) else [os.path.join(base_dir, s), os.path.join(os.getcwd(), s)]
+    if any(os.path.isfile(c) for c in candidates):
+        print(f'[WARN] set-query: "{s}" is a file - reading the query from it (write @{s} next time)', file=sys.stderr)
+        return "@" + s
+    print(f'set-query: "{s}" looks like a file path, but no such file exists - the path would have been written '
+          'into the schema as the query text. Pass the query text itself or @path/to/existing/file.sql',
+          file=sys.stderr)
+    sys.exit(1)
+
+
 def new_uuid():
     return str(uuid.uuid4())
 
@@ -2123,7 +2154,11 @@ elif operation == "set-query":
     if query_el is None:
         print(f"No <query> element found in dataset '{ds_name}'", file=sys.stderr)
         sys.exit(1)
-    query_el.text = resolve_query_value(value_arg, query_base_dir)
+    query_el.text = resolve_query_value(checked_set_query_value(value_arg, query_base_dir), query_base_dir)
+    if not re.search(r"(?i)\b(ВЫБРАТЬ|SELECT)\b", query_el.text):
+        print("set-query: the value is not a query text (no ВЫБРАТЬ/SELECT): "
+              f"{query_el.text[:120]!r}. Pass the query text itself or @path/to/file.sql", file=sys.stderr)
+        sys.exit(1)
     print(f'[OK] Query replaced in dataset "{ds_name}"')
 
 elif operation == "patch-query":

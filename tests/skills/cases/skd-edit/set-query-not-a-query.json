@@ -1,0 +1,29 @@
+{
+  "name": "set-query: текст без ВЫБРАТЬ/SELECT - отказ",
+  "preRun": [
+    {
+      "script": "skd-compile/scripts/skd-compile",
+      "input": {
+        "dataSets": [
+          {
+            "name": "Основной",
+            "query": "ВЫБРАТЬ 1 КАК Поле",
+            "fields": [
+              "Поле"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-DefinitionFile": "{inputFile}",
+        "-OutputPath": "{workDir}/Template.xml"
+      }
+    }
+  ],
+  "params": {
+    "templatePath": "Template.xml",
+    "operation": "set-query",
+    "value": "Запрос по остаткам"
+  },
+  "expectError": "not a query text"
+}
