@@ -72,6 +72,7 @@ allowed-tools:
 | БСП-регистрация обработки | `/1c-bsp-registration` |
 | Добавить команду БСП | `/1c-bsp-command` |
 | Загрузка файла с клиента на сервер (CSV, Excel, JSON) | `/1c-file-upload` |
+| Печатная форма документа (БСП, макет MXL) | `/1c-print-form` |
 | Собрать EPF | `/epf-build` |
 | Разобрать EPF | `/epf-dump` |
 | Создать отчет | `/erf-init` |
