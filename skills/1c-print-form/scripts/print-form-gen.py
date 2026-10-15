@@ -443,12 +443,22 @@ def main():
     for k in ("variant", "configPath", "object", "id", "title"):
         if k not in spec:
             fail(f"В описании нет ключа '{k}'.")
-    # относительные пути - от каталога файла описания
+    # относительные пути - от каталога файла описания; путь Git Bash /c/... - в C:/... (в print-2 15.10.2026 модель
+    # указала /c/AI/.../demo2, Python в Windows прочитал его как C:\c\AI\..., и генератор отказал ложным "нет БСП")
     base = spec_path.parent
-    spec["configPath"] = str(base / spec["configPath"])
+
+    def norm(value):
+        m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
+        if m and sys.platform == "win32":
+            value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
+        return str(base / value)
+    spec["configPath"] = norm(spec["configPath"])
     for part, key in (("extension", "path"), ("external", "outputDir")):
         if spec.get(part, {}).get(key):
-            spec[part][key] = str(base / spec[part][key])
+            spec[part][key] = norm(spec[part][key])
+    if not (Path(spec["configPath"]) / "Configuration.xml").is_file():
+        fail(f"В configPath нет Configuration.xml: {spec['configPath']}. Укажи каталог XML-выгрузки конфигурации - "
+             f"абсолютный путь вида C:/... или путь относительно файла описания.")
     if not (Path(spec["configPath"]) / "CommonModules" / "УправлениеПечатью.xml").is_file():
         fail("В выгрузке нет общего модуля УправлениеПечатью - конфигурация без подсистемы Печать БСП, генератор "
              "неприменим. Сообщи пользователю.")
