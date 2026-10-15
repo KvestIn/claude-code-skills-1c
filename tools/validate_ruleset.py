@@ -160,6 +160,18 @@ def check_frontmatter(problems):
                              f"name={name} не совпадает с именем каталога {skill_dir.name}"))
         if not fields.get("description"):
             problems.append(("ERROR", str(skill_md), "во frontmatter нет поля description"))
+        # Значение без кавычек с ": " или " #" - невалидный YAML: среда не разбирает frontmatter и
+        # показывает модели заголовок вместо описания, триггеры навыка теряются (1c-form-code,
+        # 1c-print-form, 1c-change-package, найдено 16.10.2026).
+        for key in ("description", "argument-hint"):
+            value = fields.get(key, "")
+            head = read(skill_md).split("\n---", 1)[0]
+            block_scalar = re.search(rf"(?m)^{re.escape(key)}:\s*[>|]", head)
+            if isinstance(value, str) and value and not block_scalar and value[0] not in "\"'" and \
+                    (": " in value or " #" in value or value.endswith(":")):
+                problems.append(("ERROR", str(skill_md),
+                                 f"{key} без кавычек содержит ': ' или ' #' - невалидный YAML, "
+                                 f"заключи значение в кавычки"))
 
     for rule in rule_files():
         fields, _ = parse_frontmatter(read(rule))
