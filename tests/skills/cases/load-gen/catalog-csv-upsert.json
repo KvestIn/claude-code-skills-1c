@@ -1,0 +1,14 @@
+{
+  "name": "Справочник из CSV: создать или обновить по ключу, разбор через точку с запятой, счетчики",
+  "runtimeOnly": "python",
+  "preRun": [
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "CommonModule", "name": "ФайловаяСистемаКлиент", "clientManagedApplication": true }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "Catalog", "name": "Номенклатура", "attributes": ["Артикул: String(50)"] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "Catalog", "name": "Контрагенты", "attributes": ["ИНН: String(12)", "КПП: String(9)"] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "InformationRegister", "name": "Цены", "periodicity": "Day", "dimensions": ["Номенклатура: CatalogRef.Номенклатура"], "resources": ["Цена: Number(15,2)"] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } }
+  ],
+  "input": { "configPath": ".", "outputDir": "src", "name": "ЗагрузкаКонтрагентов", "title": "Загрузка контрагентов",
+             "source": { "format": "csv", "delimiter": ";", "header": true, "columns": [ { "name": "Наименование", "col": 1 }, { "name": "ИНН", "col": 2 }, { "name": "КПП", "col": 3 } ] },
+             "target": { "kind": "catalog", "object": "Catalog.Контрагенты", "mode": "upsert", "key": { "attribute": "ИНН", "value": "ИНН" },
+                         "set": { "Наименование": "Наименование", "КПП": "КПП" } } }
+}

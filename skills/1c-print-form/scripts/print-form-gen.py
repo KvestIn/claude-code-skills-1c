@@ -65,7 +65,8 @@ def read_object(config, kind, name):
                 continue
             props = kid(a, "Properties")
             n = kid(props, "Name")
-            types = [t.text.split(":")[-1] for t in a.iter() if local(t.tag) == "Type" and t.text]
+            types = [t.text.strip().split(":")[-1] for t in a.iter()
+                     if local(t.tag) == "Type" and t.text and t.text.strip()]
             if n is not None:
                 out[n.text] = types
         return out

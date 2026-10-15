@@ -1,0 +1,15 @@
+{
+  "name": "Периодический регистр из Excel: поиск ссылки по артикулу одним запросом, период из параметра формы",
+  "runtimeOnly": "python",
+  "preRun": [
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "CommonModule", "name": "ФайловаяСистемаКлиент", "clientManagedApplication": true }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "Catalog", "name": "Номенклатура", "attributes": ["Артикул: String(50)"] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "Catalog", "name": "Контрагенты", "attributes": ["ИНН: String(12)", "КПП: String(9)"] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "InformationRegister", "name": "Цены", "periodicity": "Day", "dimensions": ["Номенклатура: CatalogRef.Номенклатура"], "resources": ["Цена: Number(15,2)"] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } }
+  ],
+  "input": { "configPath": ".", "outputDir": "src", "name": "ЗагрузкаЦен", "title": "Загрузка цен",
+             "source": { "format": "excel", "header": true, "columns": [ { "name": "Артикул", "col": 1 }, { "name": "Цена", "col": 2 } ] },
+             "params": [ { "name": "Дата", "type": "date", "title": "Дата цен" } ],
+             "target": { "kind": "register", "object": "InformationRegister.Цены",
+                         "set": { "Период": "param:Дата", "Номенклатура": { "lookup": "Catalog.Номенклатура", "by": "Артикул", "value": "Артикул" }, "Цена": "Цена" } } }
+}
