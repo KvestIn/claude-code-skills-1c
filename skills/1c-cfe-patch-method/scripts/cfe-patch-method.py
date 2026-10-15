@@ -95,6 +95,15 @@ MODULE_FILE_MAP = {
 }
 
 
+FORM_CODE_HINT = (
+    "[ПОДСКАЗКА] Заимствована форма. Если задача - добавить на нее поле, группу, надпись или таблицу из запроса,\n"
+    "  кнопку, обработчик изменения поля, условное оформление или реквизит формы из кода, код руками не пиши:\n"
+    "  это делает генератор навыка 1c-form-code (описание JSON, затем команда\n"
+    "  python \"$HOME/.claude/skills/1c-form-code/scripts/form-code-gen.py\" -SpecPath <описание.json>).\n"
+    "  Генератор работает на пустом модуле заимствованной формы - заимствованную сейчас форму он примет как есть."
+)
+
+
 def read_bsl(path):
     with open(path, "r", encoding="utf-8-sig", newline="") as fh:
         return fh.read()
@@ -837,6 +846,9 @@ def main():
     if orig_preproc:
         print(f"     Препроцессор: {IF_START}:{orig_preproc}")
     print(f"     Контекст:   {context_annotation}")
+    if is_form_module:
+        print()
+        print(FORM_CODE_HINT.replace("Заимствована форма", "Перехватчик в модуле формы"))
 
 
 if __name__ == "__main__":
