@@ -1,0 +1,140 @@
+{
+  "name": "Документ: надпись из запроса с обновлением, очистка договора чужого владельца через УстановитьДействие, кнопка пересчета",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Контрагенты"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Договоры",
+        "owners": [
+          "Catalog.Контрагенты"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Реализация",
+        "attributes": [
+          "Контрагент: CatalogRef.Контрагенты",
+          "Договор: CatalogRef.Договоры",
+          "СуммаДокумента: Number(15,2)"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Количество: Number(15,3)",
+              "Цена: Number(15,2)",
+              "Сумма: Number(15,2)"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "form-add/scripts/form-add",
+      "args": {
+        "-ObjectPath": "{workDir}/Documents/Реализация.xml",
+        "-FormName": "ФормаДокумента"
+      }
+    },
+    {
+      "script": "form-compile/scripts/form-compile",
+      "input": {
+        "events": {
+          "OnCreateAtServer": "ПриСозданииНаСервере"
+        },
+        "attributes": [
+          {
+            "name": "Объект",
+            "type": "DocumentObject.Реализация",
+            "main": true
+          }
+        ],
+        "elements": [
+          {
+            "input": "Контрагент",
+            "path": "Объект.Контрагент"
+          },
+          {
+            "input": "Договор",
+            "path": "Объект.Договор"
+          },
+          {
+            "input": "СуммаДокумента",
+            "path": "Объект.СуммаДокумента"
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputPath": "{workDir}/Documents/Реализация/Forms/ФормаДокумента/Ext/Form.xml"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "extension": {
+      "path": "cfe/ICOM_Формы",
+      "name": "ICOM_Формы"
+    },
+    "object": "Document.Реализация",
+    "form": "ФормаДокумента",
+    "elements": [
+      {
+        "kind": "label",
+        "name": "СуммаПродаж",
+        "after": "Контрагент",
+        "query": "ВЫБРАТЬ\n\tСУММА(Реализации.СуммаДокумента) КАК Значение\nИЗ\n\tДокумент.Реализация КАК Реализации\nГДЕ\n\tРеализации.Контрагент = &Контрагент",
+        "params": {
+          "Контрагент": "Объект.Контрагент"
+        },
+        "template": "Продажи: %1",
+        "refreshOn": [
+          "Контрагент"
+        ]
+      },
+      {
+        "kind": "button",
+        "name": "ПересчитатьСуммы",
+        "title": "Пересчитать суммы",
+        "recalc": {
+          "table": "Товары",
+          "set": "Сумма",
+          "expr": "Количество * Цена",
+          "total": "СуммаДокумента"
+        }
+      }
+    ],
+    "onChange": [
+      {
+        "field": "Контрагент",
+        "clearIfOwnerDiffers": {
+          "field": "Договор"
+        }
+      }
+    ]
+  }
+}

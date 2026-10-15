@@ -1,0 +1,110 @@
+{
+  "name": "Справочник: группа и поле-реквизит формы из кода, загрузка из объекта и перенос перед записью, новый реквизит объекта с полем",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Товары",
+        "attributes": [
+          "Артикул: String(25)",
+          "Комментарий: String(500)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "form-add/scripts/form-add",
+      "args": {
+        "-ObjectPath": "{workDir}/Catalogs/Товары.xml",
+        "-FormName": "ФормаЭлемента"
+      }
+    },
+    {
+      "script": "form-compile/scripts/form-compile",
+      "input": {
+        "events": {
+          "OnCreateAtServer": "ПриСозданииНаСервере",
+          "BeforeWriteAtServer": "ПередЗаписьюНаСервере"
+        },
+        "attributes": [
+          {
+            "name": "Объект",
+            "type": "CatalogObject.Товары",
+            "main": true
+          }
+        ],
+        "elements": [
+          {
+            "group": "horizontal",
+            "name": "ГруппаШапка",
+            "showTitle": false,
+            "representation": "none",
+            "children": [
+              {
+                "input": "Наименование",
+                "path": "Объект.Description"
+              },
+              {
+                "input": "Артикул",
+                "path": "Объект.Артикул"
+              }
+            ]
+          },
+          {
+            "input": "Комментарий",
+            "path": "Объект.Комментарий"
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputPath": "{workDir}/Catalogs/Товары/Forms/ФормаЭлемента/Ext/Form.xml"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "extension": {
+      "path": "cfe/ICOM_Формы",
+      "name": "ICOM_Формы"
+    },
+    "object": "Catalog.Товары",
+    "form": "ФормаЭлемента",
+    "objectAttributes": [
+      {
+        "name": "КомментарийДляСклада",
+        "type": "string(200)",
+        "title": "Комментарий для склада"
+      }
+    ],
+    "elements": [
+      {
+        "kind": "group",
+        "name": "Дополнительно",
+        "title": "Дополнительно",
+        "after": "ГруппаШапка"
+      },
+      {
+        "kind": "field",
+        "name": "Примечание",
+        "type": "string(1000)",
+        "title": "Примечание",
+        "into": "Дополнительно",
+        "multiline": true,
+        "load": "Комментарий",
+        "save": "Комментарий"
+      },
+      {
+        "kind": "field",
+        "name": "КомментарийДляСклада",
+        "objectAttribute": "КомментарийДляСклада",
+        "after": "Артикул"
+      }
+    ]
+  }
+}
