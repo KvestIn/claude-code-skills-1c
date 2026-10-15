@@ -1,0 +1,14 @@
+{
+  "script": "1c-command-code/scripts/command-gen",
+  "setup": "empty-config",
+  "args": [
+    {
+      "flag": "-SpecPath",
+      "from": "inputFile"
+    }
+  ],
+  "snapshot": {
+    "root": "workDir",
+    "normalizeUuids": true
+  }
+}

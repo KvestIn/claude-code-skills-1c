@@ -1,0 +1,123 @@
+{
+  "name": "Создание на основании: своя процедура в менеджере источника, регистрация источника, заимствование реквизитов получателя, шапка и строки",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "CommonModule",
+        "name": "ПодключаемыеКомандыПереопределяемый",
+        "server": true
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "CommonModule",
+        "name": "СозданиеНаОснованииПереопределяемый",
+        "server": true
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Контрагенты"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Заказ",
+        "attributes": [
+          "Контрагент: CatalogRef.Контрагенты",
+          "СуммаДокумента: Number(15,2)"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Номенклатура: String(100)",
+              "Количество: Number(15,3)"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Счет",
+        "attributes": [
+          "Контрагент: CatalogRef.Контрагенты",
+          "Основание: DocumentRef.Заказ"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Номенклатура: String(100)",
+              "Количество: Number(15,3)"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "writeFile": {
+        "path": "CommonModules/ПодключаемыеКомандыПереопределяемый/Ext/Module.bsl",
+        "content": "#Область ПрограммныйИнтерфейс\n\nПроцедура ПриОпределенииВидовПодключаемыхКоманд(ВидыПодключаемыхКоманд) Экспорт\n\n\tВид = ВидыПодключаемыхКоманд.Добавить();\n\tВид.Имя = \"Печать\";\n\nКонецПроцедуры\n\nПроцедура ПриОпределенииКомандПодключенныхКОбъекту(НастройкиФормы, Источники, ПодключенныеОтчетыИОбработки, Команды) Экспорт\n\nКонецПроцедуры\n\n#КонецОбласти\n"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "extension": {
+      "path": "cfe/ICOM_Команды",
+      "name": "ICOM_Команды"
+    },
+    "commands": [
+      {
+        "kind": "basis",
+        "source": "Document.Заказ",
+        "target": "Document.Счет",
+        "header": {
+          "Контрагент": "Контрагент"
+        },
+        "basisAttribute": "Основание",
+        "tables": [
+          {
+            "source": "Товары",
+            "target": "Товары",
+            "columns": {
+              "Номенклатура": "Номенклатура",
+              "Количество": "Количество"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
