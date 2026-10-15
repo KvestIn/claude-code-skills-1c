@@ -196,7 +196,8 @@ def type_expr(config, t):
 
 
 def humanize(name):
-    """КомментарийДляСклада -> Комментарий для склада."""
+    """КомментарийДляСклада, ICOM_КомментарийДляСклада -> Комментарий для склада."""
+    name = re.sub(r"^[A-Za-z][A-Za-z0-9]*_", "", name)
     words = re.findall(r"[A-ZА-ЯЁ][a-zа-яё0-9]*|[a-zа-яё0-9]+", name)
     return " ".join([words[0]] + [w.lower() for w in words[1:]]) if words else name
 
@@ -272,7 +273,11 @@ class Gen:
 
     # имена и позиции
     def full(self, n):
-        return n if n.startswith(self.prefix) else self.prefix + n
+        # имя уже с префиксом (свой "ICOM_" или префикс расширения) второй раз не префиксуется: в ext-1 16.10.2026
+        # реквизит "ICOM_КомментарийДляСклада" стал "ICOM_WarehouseComments_ICOM_..." - второй реквизит рядом
+        if n.startswith(self.prefix) or re.match(r"^[A-Za-z][A-Za-z0-9]*_", n):
+            return n
+        return self.prefix + n
 
     def item_exists(self, n):
         return n in self.form["items"] or n in self.new_items
