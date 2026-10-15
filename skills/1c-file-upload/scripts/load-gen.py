@@ -27,6 +27,9 @@ STD = {"Catalog": {"Наименование": "string", "Код": "string", "Р
                    "ПометкаУдаления": "boolean"},
        "Document": {"Дата": "date", "Номер": "string", "ПометкаУдаления": "boolean"},
        "InformationRegister": {}}
+METADATA_DIRS = {"Catalogs", "Documents", "DataProcessors", "Reports", "InformationRegisters", "AccumulationRegisters",
+                 "CommonModules", "CommonForms", "CommonTemplates", "Enums", "Constants", "ExchangePlans", "Ext",
+                 "Languages", "Roles", "Subsystems", "ChartsOfCharacteristicTypes", "DocumentJournals"}
 FORMATS = {"csv": ("csv", "Файлы CSV (*.csv)|*.csv|Все файлы (*.*)|*.*"),
            "excel": ("xlsx", "Файлы Excel (*.xlsx;*.xls)|*.xlsx;*.xls|Все файлы (*.*)|*.*"),
            "json": ("json", "Файлы JSON (*.json)|*.json|Все файлы (*.*)|*.*")}
@@ -357,7 +360,9 @@ def body_catalog(sp):
         out += ["\t\tЕсли Ссылка = Неопределено Тогда", f"\t\t\tЭлемент = {mgr}.СоздатьЭлемент();", "\t\tИначе",
                 "\t\t\tЭлемент = Ссылка.ПолучитьОбъект();", "\t\tКонецЕсли;"]
     out += [f"\t\tЭлемент.{key['attribute']} = {source_expr(sp, key['value'], obj['fields'][key['attribute']])};"]
-    out += set_lines(sp, "Элемент", t.get("set", {}), obj["fields"], "\t\t")
+    # ключ уже присвоен выше; повтор его в set давал второе такое же присваивание (load-2, 15.10.2026)
+    rest = {a: v for a, v in t.get("set", {}).items() if a != key["attribute"]}
+    out += set_lines(sp, "Элемент", rest, obj["fields"], "\t\t")
     out += ["", "\t\tПопытка", "\t\t\tЭлемент.Записать();", "\t\tИсключение"]
     out += error_call("НомерСтроки", f"Строка.{key['value']}", "КраткоеПредставлениеОшибки(ИнформацияОбОшибке())", "\t\t\t")
     out += ["\t\t\tПродолжить;", "\t\tКонецПопытки;", ""]
@@ -515,6 +520,15 @@ def form_json(sp):
             "commands": [{"name": "ЗагрузитьИзФайла", "action": "ЗагрузитьИзФайла", "title": "Загрузить из файла"}]}
 
 
+def check_output_dir(config, output):
+    """Внешняя обработка не кладется в корень выгрузки и в каталоги ее объектов: платформа и проверки читают ее
+    как объект конфигурации, и загрузка конфигурации падает (load-1, 15.10.2026: обработка в DataProcessors/)."""
+    cfg, out = Path(config).resolve(), Path(output).resolve()
+    if out == cfg or (cfg in out.parents and out.relative_to(cfg).parts[0] in METADATA_DIRS):
+        fail(f"outputDir {output} внутри выгрузки конфигурации ({out.relative_to(cfg) if out != cfg else 'корень'}): "
+             f"внешнюю обработку клади в отдельный каталог, например src/ рядом с выгрузкой.")
+
+
 def write_bsl(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     text = "\n".join(l if l.strip() else "" for l in text.split("\n"))
@@ -537,6 +551,7 @@ def main():
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
         return str(spec_path.parent / value)
     s["configPath"], s["outputDir"] = norm(s["configPath"]), norm(s["outputDir"])
+    check_output_dir(s["configPath"], s["outputDir"])
     if not (Path(s["configPath"]) / "Configuration.xml").is_file():
         fail(f"В configPath нет Configuration.xml: {s['configPath']}. Укажи каталог XML-выгрузки конфигурации.")
     if not (Path(s["configPath"]) / "CommonModules" / "ФайловаяСистемаКлиент.xml").is_file():

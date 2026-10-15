@@ -22,6 +22,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 SKILLS = Path(__file__).resolve().parents[2]
 KINDS = {"Document": ("Documents", "Документ", "Документы"), "Catalog": ("Catalogs", "Справочник", "Справочники")}
+KIND_DIRS = {"Catalogs", "Documents", "DataProcessors", "Reports", "InformationRegisters", "AccumulationRegisters",
+             "CommonModules", "CommonForms", "CommonTemplates", "Enums", "Constants", "ExchangePlans", "Ext", "Languages",
+             "Roles", "Subsystems"}
 STD = {"Document": {"Номер", "Дата", "Ссылка", "Проведен", "ПометкаУдаления"},
        "Catalog": {"Код", "Наименование", "Ссылка", "Родитель", "Владелец", "ПометкаУдаления"}}
 
@@ -457,6 +460,13 @@ def main():
     for part, key in (("extension", "path"), ("external", "outputDir")):
         if spec.get(part, {}).get(key):
             spec[part][key] = norm(spec[part][key])
+    if spec.get("external", {}).get("outputDir"):
+        # внешняя форма в корне выгрузки или в каталогах ее объектов читается как объект конфигурации, и загрузка
+        # конфигурации падает (загрузка load-1, 15.10.2026: обработка в DataProcessors/)
+        cfg, out = Path(spec["configPath"]).resolve(), Path(spec["external"]["outputDir"]).resolve()
+        if out == cfg or (cfg in out.parents and out.relative_to(cfg).parts[0] in KIND_DIRS):
+            fail(f"external.outputDir {out} внутри выгрузки конфигурации: внешнюю обработку клади в отдельный "
+                 f"каталог, например src/ рядом с выгрузкой.")
     if not (Path(spec["configPath"]) / "Configuration.xml").is_file():
         fail(f"В configPath нет Configuration.xml: {spec['configPath']}. Укажи каталог XML-выгрузки конфигурации - "
              f"абсолютный путь вида C:/... или путь относительно файла описания.")
