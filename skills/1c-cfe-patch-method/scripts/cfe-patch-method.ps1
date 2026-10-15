@@ -25,7 +25,10 @@ param(
 	[switch]$Check,
 
 	# То же плюс перенос правок в новую редакцию оригинала.
-	[switch]$Actualize
+	[switch]$Actualize,
+
+	# Разрешить первый перехватчик в пустом модуле заимствованной формы (иначе - генератор 1c-form-code).
+	[switch]$AllowFormPatch
 )
 
 $ErrorActionPreference = "Stop"
@@ -843,6 +846,22 @@ if ($isFormModule) {
 			Write-Host ""
 		}
 	}
+}
+
+# Первый перехватчик в пустом модуле заимствованной формы - путь, которым модель обходила генератор
+# 1c-form-code и писала код формы руками (форма списка, form-3 16.10.2026: заготовка перехватчика, затем Edit).
+# Доработка формы делается генератором; осознанный перехватчик - с флагом -AllowFormPatch.
+$formXmlPath = Join-Path (Split-Path (Split-Path $bslFile -Parent) -Parent) "Form.xml"
+$moduleEmpty = -not ((Test-Path $bslFile) -and (Read-Bsl $bslFile).Trim())
+if ($isFormModule -and $moduleEmpty -and -not $AllowFormPatch -and (Test-Path $formXmlPath) -and
+		(Read-Bsl $formXmlPath).Contains("<BaseForm")) {
+	[Console]::Error.WriteLine(("Модуль заимствованной формы пуст: доработку формы (поле, группа, надпись или таблица " +
+		"из запроса, кнопка, обработчик изменения поля, условное оформление, реквизит формы из кода) делает " +
+		"генератор навыка 1c-form-code, а не перехватчик с кодом руками.`n" +
+		"  python `"`$HOME/.claude/skills/1c-form-code/scripts/form-code-gen.py`" -SpecPath <описание.json>`n" +
+		"Формат описания - Skill(skill=`"1c-form-code`"). Перехватчик в модуле формы все же нужен " +
+		"(логика, которую генератор не описывает) - повтори с флагом -AllowFormPatch."))
+	exit 1
 }
 
 # --- Размещение в модуле расширения ---

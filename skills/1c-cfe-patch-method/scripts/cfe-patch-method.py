@@ -506,6 +506,7 @@ def main():
     parser.add_argument("-ConfigPath", default="")
     parser.add_argument("-Context", default="НаСервере")
     parser.add_argument("-IsFunction", action="store_true")
+    parser.add_argument("-AllowFormPatch", action="store_true")
     parser.add_argument("-Check", action="store_true")
     parser.add_argument("-Actualize", action="store_true")
     args = parser.parse_args()
@@ -775,6 +776,21 @@ def main():
                     print(f'       /cfe-borrow -ExtensionPath {extension_path} -ConfigPath <ConfigPath> '
                           f'-Object "{obj_type}.{obj_name}.Form.{form_name}"')
                     print("")
+
+    # Первый перехватчик в пустом модуле заимствованной формы - путь, которым модель обходила генератор
+    # 1c-form-code и писала код формы руками (форма списка, form-3 16.10.2026: заготовка перехватчика, затем Edit).
+    # Доработка формы делается генератором; осознанный перехватчик - с флагом -AllowFormPatch.
+    form_xml_path = os.path.join(os.path.dirname(os.path.dirname(bsl_file)), "Form.xml")
+    module_empty = not (os.path.isfile(bsl_file) and read_bsl(bsl_file).strip())
+    if is_form_module and module_empty and not args.AllowFormPatch and os.path.isfile(form_xml_path) \
+            and "<BaseForm" in read_bsl(form_xml_path):
+        print("Модуль заимствованной формы пуст: доработку формы (поле, группа, надпись или таблица из запроса, "
+              "кнопка, обработчик изменения поля, условное оформление, реквизит формы из кода) делает генератор "
+              "навыка 1c-form-code, а не перехватчик с кодом руками.\n"
+              "  python \"$HOME/.claude/skills/1c-form-code/scripts/form-code-gen.py\" -SpecPath <описание.json>\n"
+              "Формат описания - Skill(skill=\"1c-form-code\"). Перехватчик в модуле формы все же нужен "
+              "(логика, которую генератор не описывает) - повтори с флагом -AllowFormPatch.", file=sys.stderr)
+        sys.exit(1)
 
     # --- Размещение в модуле расширения ---
     os.makedirs(os.path.dirname(bsl_file), exist_ok=True)
