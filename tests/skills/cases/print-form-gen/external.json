@@ -1,0 +1,13 @@
+{
+  "name": "Внешняя печатная форма: СведенияОВнешнейОбработке, Печать с четырьмя параметрами, макет обработки",
+  "runtimeOnly": "python",
+  "preRun": [
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "CommonModule", "name": "УправлениеПечатью", "server": true }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "CommonModule", "name": "УправлениеПечатьюПереопределяемый", "server": true }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "Document", "name": "Реализация", "attributes": ["Контрагент: String(100)"], "tabularSections": [{ "name": "Товары", "attributes": ["Номенклатура: String(100)", "Количество: Number(15,3)", "Цена: Number(15,2)"] }] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } }
+  ],
+  "input": { "variant": "external", "configPath": ".", "object": "Document.Реализация", "id": "ICOM_Акт", "title": "Акт",
+             "header": [ { "field": "Контрагент" } ],
+             "table": { "section": "Товары", "columns": [ { "field": "Номенклатура" }, { "field": "Количество", "total": true } ] },
+             "external": { "outputDir": "epf", "name": "ICOM_ПечатьАкта" } }
+}
