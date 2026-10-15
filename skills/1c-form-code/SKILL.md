@@ -67,7 +67,8 @@ python "$HOME/.claude/skills/1c-form-code/scripts/form-code-gen.py" -SpecPath "<
   ],
   "onChange": [{"field": "Контрагент", "clearIfOwnerDiffers": {"field": "Договор"}}],
   "appearance": [{"list": "Список", "filter": {"field": "Проведен", "value": false},
-                  "set": {"ЦветТекста": "WebЦвета.Серый"}}]
+                  "set": {"ЦветТекста": "WebЦвета.Серый"}}],
+  "intercepts": [{"method": "КонтрагентПриИзменении", "type": "После", "body": ["ОбновитьЦены();"]}]
 }
 ```
 
@@ -87,6 +88,7 @@ python "$HOME/.claude/skills/1c-form-code/scripts/form-code-gen.py" -SpecPath "<
 | `onChange.clearIfOwnerDiffers` | очистка ссылки, если ее владелец (или реквизит `owner`) не равен полю |
 | `onChange.body` | строки кода, по умолчанию на сервере (`"server": false` - на клиенте) |
 | `appearance` | условное оформление динамического списка: отбор `filter`, параметры `set`, поля `fields` (пусто - вся строка) |
+| `intercepts` | перехват существующего метода типовой формы: `method`, `type` После, Перед или Вместо (с `ПродолжитьВызов`), `body` - строки кода; `После` на `ПриСозданииНаСервере` объединяется с кодом генератора |
 
 Типы: `string`, `string(N)`, `number(N,M)`, `date`, `dateTime`, `boolean`, `CatalogRef.X`, `DocumentRef.X`,
 `EnumRef.X`. Параметр запроса - `Объект.<Реквизит>`, `Объект.Ссылка` или выражение BSL.

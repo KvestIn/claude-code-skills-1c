@@ -22,10 +22,6 @@
     {
       "flag": "-InterceptorType",
       "from": "case.interceptorType"
-    },
-    {
-      "flag": "-AllowFormPatch",
-      "from": "switch"
     }
   ],
   "snapshot": {

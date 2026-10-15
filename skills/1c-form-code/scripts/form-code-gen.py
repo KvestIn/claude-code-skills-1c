@@ -265,6 +265,7 @@ class Gen:
         self.loads = []          # значения реквизитов формы из объекта
         self.calls = []          # заполнение надписей и таблиц
         self.before_write = []
+        self.intercept_procs = []
         self.server_procs = []
         self.client_procs = []
         self.command_procs = []
@@ -580,6 +581,42 @@ class Gen:
         self.after_create += lines
 
     # события
+    def add_intercept(self, ic):
+        """Перехват существующего метода типовой формы: После, Перед, Вместо (со ПродолжитьВызов).
+        Закрывает случай, ради которого модель ставила перехватчик в пустой модуль формы вручную (form-3 16.10.2026)."""
+        method, kind, body = ic.get("method"), ic.get("type", "После"), ic.get("body") or []
+        if kind not in ("После", "Перед", "Вместо"):
+            fail(f"intercepts.type - После, Перед или Вместо, получено '{kind}'.")
+        if not body:
+            fail(f"intercepts '{method}': нет body (строк кода перехватчика).")
+        base_mod = Path(self.config) / KINDS[self.kind][0] / self.name / "Forms" / self.spec["form"] / "Ext" / "Form" / \
+            "Module.bsl"
+        text = base_mod.read_text(encoding="utf-8-sig") if base_mod.is_file() else ""
+        found = re.search(rf"(?m)^(&[^\n]+)\r?\n(?:&[^\n]+\r?\n)*\s*(Процедура|Функция)\s+{re.escape(method or '')}"
+                          rf"\s*\(([^)]*)\)", text)
+        if not found:
+            names = re.findall(r"(?m)^\s*(?:Процедура|Функция)\s+([\wА-Яа-яЁё]+)\s*\(", text)
+            fail(f"intercepts: метода '{method}' в модуле формы {self.spec['form']} нет. Методы: "
+                 f"{', '.join(names[:80])}{' ...' if len(names) > 80 else ''}")
+        directive, kw, params = found.group(1).strip(), found.group(2), found.group(3).strip()
+        if kw == "Функция" and kind != "Вместо":
+            fail(f"intercepts '{method}': функция перехватывается только типом Вместо (с ПродолжитьВызов).")
+        if kind == "Вместо" and not any("ПродолжитьВызов" in ln for ln in body):
+            fail(f"intercepts '{method}': перехват Вместо без ПродолжитьВызов отменяет типовой код. Добавь "
+                 f"ПродолжитьВызов({re.sub(r'Знач\s+|\s*=[^,]*', '', params)}) или используй После/Перед.")
+        on_create = self.form["events"].get("OnCreateAtServer")
+        before_write = self.form["events"].get("BeforeWriteAtServer")
+        if method == on_create and kind == "После":
+            self.after_create += list(body) + [""]
+            return
+        if method == before_write and kind == "Перед":
+            self.before_write += list(body)
+            return
+        params_clean = re.sub(r"\s*=\s*[^,]+", "", params)
+        end = "КонецФункции" if kw == "Функция" else "КонецПроцедуры"
+        self.intercept_procs.append([directive, f'&{kind}("{method}")', f"{kw} {self.prefix}{method}({params_clean})",
+                                     ""] + indent(body) + ["", end])
+
     def form_event(self, ru):
         """Имя базового обработчика события формы или None (тогда событие добавляется в Form.xml)."""
         return self.form["events"].get(FORM_EVENTS[ru][0])
@@ -627,6 +664,12 @@ class Gen:
                 head = ["&НаСервере", f"Процедура {proc}({params})"]
                 xml_events.append({"name": FORM_EVENTS[ru][0], "handler": proc})
             events.append(head + [""] + indent(lines) + ["", "КонецПроцедуры"])
+        names = [p[2] for p in self.intercept_procs] + [ln for p in self.client_procs for ln in p[:3]]
+        dup = [n for n in names if names.count(n) > 1 and n.startswith(("Процедура", "Функция"))]
+        if dup:
+            fail(f"Один и тот же метод формы перехвачен дважды ({dup[0]}): объедини код в одном разделе описания "
+                 f"(onChange или intercepts).")
+        events += sorted(self.intercept_procs, key=lambda p: 0 if p[0].startswith("&НаСервере") else 1)
         regions = [("ОбработчикиСобытийФормы", events), ("ОбработчикиСобытийЭлементовШапкиФормы", self.client_procs),
                    ("ОбработчикиКомандФормы", self.command_procs), ("СлужебныеПроцедурыИФункции", self.server_procs)]
         out = []
@@ -663,12 +706,14 @@ class Gen:
             self.add_on_change(oc)
         for ap in spec.get("appearance", []):
             self.add_appearance(ap)
+        for ic in spec.get("intercepts", []):
+            self.add_intercept(ic)
         for n in self.new_items:
             if n in self.form["items"]:
                 fail(f"Элемент '{n}' уже есть на форме - выбери другое имя.")
         text, xml_events = self.module()
         if not text:
-            fail("Описание пустое: нет elements, onChange, appearance.")
+            fail("Описание пустое: нет elements, onChange, appearance, intercepts.")
 
         form_dir = ext / folder / self.name / "Forms" / spec["form"]
         mod = form_dir / "Ext" / "Form" / "Module.bsl"

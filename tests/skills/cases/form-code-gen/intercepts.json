@@ -1,0 +1,131 @@
+{
+  "name": "Перехват методов типовой формы: После на обработчике поля, После ПриСозданииНаСервере - в общий перехватчик",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Контрагенты"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Договоры",
+        "owners": [
+          "Catalog.Контрагенты"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Реализация",
+        "attributes": [
+          "Контрагент: CatalogRef.Контрагенты",
+          "Договор: CatalogRef.Договоры",
+          "СуммаДокумента: Number(15,2)"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Количество: Number(15,3)",
+              "Цена: Number(15,2)",
+              "Сумма: Number(15,2)"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "form-add/scripts/form-add",
+      "args": {
+        "-ObjectPath": "{workDir}/Documents/Реализация.xml",
+        "-FormName": "ФормаДокумента"
+      }
+    },
+    {
+      "script": "form-compile/scripts/form-compile",
+      "input": {
+        "events": {
+          "OnCreateAtServer": "ПриСозданииНаСервере"
+        },
+        "attributes": [
+          {
+            "name": "Объект",
+            "type": "DocumentObject.Реализация",
+            "main": true
+          }
+        ],
+        "elements": [
+          {
+            "input": "Контрагент",
+            "path": "Объект.Контрагент"
+          },
+          {
+            "input": "Договор",
+            "path": "Объект.Договор",
+            "on": [
+              "OnChange"
+            ]
+          },
+          {
+            "input": "СуммаДокумента",
+            "path": "Объект.СуммаДокумента"
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputPath": "{workDir}/Documents/Реализация/Forms/ФормаДокумента/Ext/Form.xml"
+      }
+    },
+    {
+      "writeFile": {
+        "path": "Documents/Реализация/Forms/ФормаДокумента/Ext/Form/Module.bsl",
+        "content": "#Область ОбработчикиСобытийФормы\n\n&НаСервере\nПроцедура ПриСозданииНаСервере(Отказ, СтандартнаяОбработка)\n\nКонецПроцедуры\n\n#КонецОбласти\n\n#Область ОбработчикиСобытийЭлементовШапкиФормы\n\n&НаКлиенте\nПроцедура ДоговорПриИзменении(Элемент)\n\nКонецПроцедуры\n\n#КонецОбласти\n"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "extension": {
+      "path": "cfe/ICOM_Формы",
+      "name": "ICOM_Формы"
+    },
+    "object": "Document.Реализация",
+    "form": "ФормаДокумента",
+    "intercepts": [
+      {
+        "method": "ДоговорПриИзменении",
+        "type": "После",
+        "body": [
+          "Объект.СуммаДокумента = 0;"
+        ]
+      },
+      {
+        "method": "ПриСозданииНаСервере",
+        "type": "После",
+        "body": [
+          "Элементы.СуммаДокумента.ТолькоПросмотр = Истина;"
+        ]
+      }
+    ]
+  }
+}

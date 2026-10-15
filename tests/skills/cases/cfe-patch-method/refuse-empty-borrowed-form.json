@@ -78,13 +78,12 @@
     "methodName": "ОбработкаОповещения",
     "interceptorType": "After"
   },
-  "AllowFormPatch": false,
   "noSnapshot": "отказ, модуль не создается",
   "expectError": true,
   "expect": {
     "stderrContains": [
       "1c-form-code",
-      "-AllowFormPatch"
+      "intercepts"
     ]
   }
 }
