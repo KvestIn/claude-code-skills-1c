@@ -1,0 +1,128 @@
+{
+  "name": "Отказ: путь расширения - каталог с расширениями, а не само расширение",
+  "runtimeOnly": "python",
+  "noSnapshot": "отказ, файлы не создаются",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Контрагенты"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Договоры",
+        "owners": [
+          "Catalog.Контрагенты"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Реализация",
+        "attributes": [
+          "Контрагент: CatalogRef.Контрагенты",
+          "Договор: CatalogRef.Договоры",
+          "СуммаДокумента: Number(15,2)"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Количество: Number(15,3)",
+              "Цена: Number(15,2)",
+              "Сумма: Number(15,2)"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "form-add/scripts/form-add",
+      "args": {
+        "-ObjectPath": "{workDir}/Documents/Реализация.xml",
+        "-FormName": "ФормаДокумента"
+      }
+    },
+    {
+      "script": "form-compile/scripts/form-compile",
+      "input": {
+        "events": {
+          "OnCreateAtServer": "ПриСозданииНаСервере"
+        },
+        "attributes": [
+          {
+            "name": "Объект",
+            "type": "DocumentObject.Реализация",
+            "main": true
+          }
+        ],
+        "elements": [
+          {
+            "input": "Контрагент",
+            "path": "Объект.Контрагент"
+          },
+          {
+            "input": "Договор",
+            "path": "Объект.Договор"
+          },
+          {
+            "input": "СуммаДокумента",
+            "path": "Объект.СуммаДокумента"
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputPath": "{workDir}/Documents/Реализация/Forms/ФормаДокумента/Ext/Form.xml"
+      }
+    },
+    {
+      "writeFile": {
+        "path": "cfe/ICOM_Старое/Configuration.xml",
+        "content": "<MetaDataObject/>"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "extension": {
+      "path": "cfe",
+      "name": "ICOM_Формы"
+    },
+    "object": "Document.Реализация",
+    "form": "ФормаДокумента",
+    "elements": [
+      {
+        "kind": "field",
+        "name": "Сумма",
+        "data": "Объект.СуммаДокумента",
+        "after": "Договор"
+      }
+    ]
+  },
+  "expectError": true,
+  "expect": {
+    "stderrContains": [
+      "не каталог расширения",
+      "ICOM_Старое"
+    ]
+  }
+}

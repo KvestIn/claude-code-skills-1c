@@ -195,6 +195,12 @@ def type_expr(config, t):
          f"DocumentRef.X, EnumRef.X.")
 
 
+def humanize(name):
+    """КомментарийДляСклада -> Комментарий для склада."""
+    words = re.findall(r"[A-ZА-ЯЁ][a-zа-яё0-9]*|[a-zа-яё0-9]+", name)
+    return " ".join([words[0]] + [w.lower() for w in words[1:]]) if words else name
+
+
 def bsl_value(v):
     """Литерал BSL из значения JSON; строка - строковый литерал."""
     if isinstance(v, bool):
@@ -630,6 +636,13 @@ class Gen:
         ext = Path(spec["extension"]["path"])
         folder = KINDS[self.kind][0]
         if not (ext / "Configuration.xml").is_file():
+            # путь к каталогу, где лежат расширения, а не к самому расширению: новое пустое расширение рядом с
+            # существующими загружается второй раз (задача ext-2 15.10.2026, лишние Configuration.xml, Languages, Roles)
+            if ext.is_dir() and any(ext.iterdir()):
+                found = sorted(str(c.parent) for c in ext.glob("*/Configuration.xml")) +                     sorted(str(c.parent) for c in ext.glob("*/*/Configuration.xml"))
+                fail(f"extension.path {ext} - не каталог расширения (в нем нет Configuration.xml), и он не пустой. "
+                     f"Расширения внутри: {', '.join(found) or 'нет'}. Укажи каталог существующего расширения или "
+                     f"новый пустой каталог.")
             run_skill("1c-cfe-init/scripts/cfe-init.py", "-Name", spec["extension"]["name"], "-OutputDir", ext,
                       "-ConfigPath", self.config, "-NoRole")
         m = re.search(r"<NamePrefix>([^<]*)</NamePrefix>", (ext / "Configuration.xml").read_text(encoding="utf-8-sig"))
@@ -670,9 +683,11 @@ class Gen:
             if f"<Name>{self.new_attrs[a['name']]}</Name>" not in obj_xml.read_text(encoding="utf-8-sig"):
                 run_skill("1c-meta-edit/scripts/meta-edit.py", "-ObjectPath", obj_xml, "-Operation", "add-attribute",
                           "-Value", f"{self.new_attrs[a['name']]}: {meta_type(a['type'])}")
-                if a.get("title"):
-                    run_skill("1c-meta-edit/scripts/meta-edit.py", "-ObjectPath", obj_xml, "-Operation",
-                              "modify-attribute", "-Value", f"{self.new_attrs[a['name']]}: synonym={a['title']}")
+                # без заголовка навык строит синоним из полного имени с префиксом ("Custom extension_комментарий
+                # для склада", задача ext-1 15.10.2026) - синоним задается всегда, по умолчанию из имени без префикса
+                title = a.get("title") or humanize(a["name"])
+                run_skill("1c-meta-edit/scripts/meta-edit.py", "-ObjectPath", obj_xml, "-Operation",
+                          "modify-attribute", "-Value", f"{self.new_attrs[a['name']]}: synonym={title}")
         if xml_events:
             tmp = ext / f".{spec['form']}.events.json"
             tmp.write_text(json.dumps({"formEvents": xml_events}, ensure_ascii=False), encoding="utf-8")

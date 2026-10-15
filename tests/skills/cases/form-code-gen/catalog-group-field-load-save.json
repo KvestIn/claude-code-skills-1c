@@ -78,8 +78,7 @@
     "objectAttributes": [
       {
         "name": "КомментарийДляСклада",
-        "type": "string(200)",
-        "title": "Комментарий для склада"
+        "type": "string(200)"
       }
     ],
     "elements": [
