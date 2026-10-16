@@ -1,0 +1,115 @@
+{
+  "name": "Табличная часть документа: реквизит шапки через Ссылка, отбор по проведенным и периоду, вычисляемая сумма, диаграмма",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Склады"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Товары",
+        "attributes": [
+          "Вид: String(50)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Контрагенты"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "AccumulationRegister",
+        "name": "ОстаткиТоваров",
+        "registerType": "Balance",
+        "dimensions": [
+          "Склад: CatalogRef.Склады",
+          "Товар: CatalogRef.Товары"
+        ],
+        "resources": [
+          "Количество: Number(15,3)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Реализация",
+        "attributes": [
+          "Контрагент: CatalogRef.Контрагенты"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Товар: CatalogRef.Товары",
+              "Количество: Number(15,3)",
+              "Цена: Number(15,2)"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "outputDir": "src",
+    "name": "Продажи",
+    "title": "Продажи",
+    "source": {
+      "document": "Document.Реализация",
+      "table": "Товары"
+    },
+    "dimensions": [
+      "Контрагент",
+      "Товар",
+      "Товар.Вид"
+    ],
+    "resources": [
+      "Количество",
+      {
+        "field": "Сумма",
+        "expr": "Количество * Цена"
+      }
+    ],
+    "groupings": [
+      "Контрагент",
+      "Товар"
+    ],
+    "chart": {
+      "points": "Контрагент",
+      "value": "Сумма"
+    }
+  }
+}
