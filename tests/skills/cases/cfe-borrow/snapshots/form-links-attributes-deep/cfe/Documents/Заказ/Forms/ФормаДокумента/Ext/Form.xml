@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Form xmlns="http://v8.1c.ru/8.3/xcf/logform" xmlns:app="http://v8.1c.ru/8.2/managed-application/core" xmlns:cfg="http://v8.1c.ru/8.1/data/enterprise/current-config" xmlns:v8="http://v8.1c.ru/8.1/data/core" xmlns:xr="http://v8.1c.ru/8.3/xcf/readable" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.17">
+	<AutoCommandBar name="ФормаКоманднаяПанель" id="-1"/>
+	<ChildItems>
+		<InputField name="Партнер" id="1">
+			<DataPath>Объект.Партнер</DataPath>
+			<ContextMenu name="ПартнерКонтекстноеМеню" id="2"/>
+			<ExtendedTooltip name="ПартнерРасширеннаяПодсказка" id="3"/>
+		</InputField>
+		<InputField name="КонтактноеЛицо" id="4">
+			<DataPath>Объект.КонтактноеЛицо</DataPath>
+			<ChoiceParameterLinks>
+				<xr:Link>
+					<xr:Name>Отбор.Владелец</xr:Name>
+					<xr:DataPath xsi:type="xs:string">Объект.Партнер</xr:DataPath>
+					<xr:ValueChange>Clear</xr:ValueChange>
+				</xr:Link>
+			</ChoiceParameterLinks>
+			<ContextMenu name="КонтактноеЛицоКонтекстноеМеню" id="5"/>
+			<ExtendedTooltip name="КонтактноеЛицоРасширеннаяПодсказка" id="6"/>
+		</InputField>
+		<InputField name="Источник" id="7">
+			<TypeLink>
+				<xr:DataPath>Канал</xr:DataPath>
+				<xr:LinkItem>0</xr:LinkItem>
+			</TypeLink>
+			<ContextMenu name="ИсточникКонтекстноеМеню" id="8"/>
+			<ExtendedTooltip name="ИсточникРасширеннаяПодсказка" id="9"/>
+		</InputField>
+		<InputField name="ТоварыЕдиница" id="10">
+			<DataPath>Объект.Товары.Номенклатура.Единица</DataPath>
+			<ContextMenu name="ТоварыЕдиницаКонтекстноеМеню" id="11"/>
+			<ExtendedTooltip name="ТоварыЕдиницаРасширеннаяПодсказка" id="12"/>
+		</InputField>
+	</ChildItems>
+	<Attributes>
+		<Attribute name="Объект" id="1000001">
+			<Type><v8:Type>cfg:DocumentObject.Заказ</v8:Type></Type>
+			<MainAttribute>true</MainAttribute>
+			<SavedData>true</SavedData>
+		</Attribute>
+		<Attribute name="Канал" id="21">
+			<Type>
+				<v8:Type>cfg:CatalogRef.Каналы</v8:Type>
+			</Type>
+			<SavedData>true</SavedData>
+		</Attribute>
+	</Attributes>
+	<BaseForm version="2.17">
+		<AutoCommandBar name="ФормаКоманднаяПанель" id="-1"/>
+		<ChildItems>
+			<InputField name="Партнер" id="1">
+				<DataPath>Объект.Партнер</DataPath>
+				<ContextMenu name="ПартнерКонтекстноеМеню" id="2"/>
+				<ExtendedTooltip name="ПартнерРасширеннаяПодсказка" id="3"/>
+			</InputField>
+			<InputField name="КонтактноеЛицо" id="4">
+				<DataPath>Объект.КонтактноеЛицо</DataPath>
+				<ChoiceParameterLinks>
+					<xr:Link>
+						<xr:Name>Отбор.Владелец</xr:Name>
+						<xr:DataPath xsi:type="xs:string">Объект.Партнер</xr:DataPath>
+						<xr:ValueChange>Clear</xr:ValueChange>
+					</xr:Link>
+				</ChoiceParameterLinks>
+				<ContextMenu name="КонтактноеЛицоКонтекстноеМеню" id="5"/>
+				<ExtendedTooltip name="КонтактноеЛицоРасширеннаяПодсказка" id="6"/>
+			</InputField>
+			<InputField name="Источник" id="7">
+				<TypeLink>
+					<xr:DataPath>Канал</xr:DataPath>
+					<xr:LinkItem>0</xr:LinkItem>
+				</TypeLink>
+				<ContextMenu name="ИсточникКонтекстноеМеню" id="8"/>
+				<ExtendedTooltip name="ИсточникРасширеннаяПодсказка" id="9"/>
+			</InputField>
+			<InputField name="ТоварыЕдиница" id="10">
+				<DataPath>Объект.Товары.Номенклатура.Единица</DataPath>
+				<ContextMenu name="ТоварыЕдиницаКонтекстноеМеню" id="11"/>
+				<ExtendedTooltip name="ТоварыЕдиницаРасширеннаяПодсказка" id="12"/>
+			</InputField>
+		</ChildItems>
+		<Attributes>
+			<Attribute name="Объект" id="1000001">
+				<Type><v8:Type>cfg:DocumentObject.Заказ</v8:Type></Type>
+				<MainAttribute>true</MainAttribute>
+				<SavedData>true</SavedData>
+			</Attribute>
+			<Attribute name="Канал" id="21">
+				<Type>
+					<v8:Type>cfg:CatalogRef.Каналы</v8:Type>
+				</Type>
+				<SavedData>true</SavedData>
+			</Attribute>
+		</Attributes>
+	</BaseForm>
+</Form>

@@ -1,0 +1,127 @@
+{
+  "name": "Форма со связями: реквизит формы из TypeLink переносится, Объект.* в связях - основной реквизит сам, путь через табличную часть заимствует справочник с реквизитом, определяемый тип - с Type",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Партнеры"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "КонтактныеЛица"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Каналы"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Единицы"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Номенклатура",
+        "attributes": [
+          "Единица: CatalogRef.Единицы"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "DefinedType",
+        "name": "ДенежнаяСумма",
+        "valueTypes": [
+          "Number(15,2)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Заказ",
+        "attributes": [
+          "Партнер: CatalogRef.Партнеры",
+          "КонтактноеЛицо: CatalogRef.КонтактныеЛица"
+        ],
+        "tabularSections": [
+          {
+            "name": "Товары",
+            "attributes": [
+              "Номенклатура: CatalogRef.Номенклатура",
+              "Сумма: DefinedType.ДенежнаяСумма"
+            ]
+          }
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "form-add/scripts/form-add",
+      "args": {
+        "-ObjectPath": "{workDir}/Documents/Заказ.xml",
+        "-FormName": "ФормаДокумента"
+      }
+    },
+    {
+      "writeFile": {
+        "path": "Documents/Заказ/Forms/ФормаДокумента/Ext/Form.xml",
+        "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Form xmlns=\"http://v8.1c.ru/8.3/xcf/logform\" xmlns:app=\"http://v8.1c.ru/8.2/managed-application/core\" xmlns:cfg=\"http://v8.1c.ru/8.1/data/enterprise/current-config\" xmlns:v8=\"http://v8.1c.ru/8.1/data/core\" xmlns:xr=\"http://v8.1c.ru/8.3/xcf/readable\" xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" version=\"2.17\">\n\t<AutoCommandBar name=\"ФормаКоманднаяПанель\" id=\"-1\"/>\n\t<ChildItems>\n\t\t<InputField name=\"Партнер\" id=\"1\">\n\t\t\t<DataPath>Объект.Партнер</DataPath>\n\t\t\t<ContextMenu name=\"ПартнерКонтекстноеМеню\" id=\"2\"/>\n\t\t\t<ExtendedTooltip name=\"ПартнерРасширеннаяПодсказка\" id=\"3\"/>\n\t\t</InputField>\n\t\t<InputField name=\"КонтактноеЛицо\" id=\"4\">\n\t\t\t<DataPath>Объект.КонтактноеЛицо</DataPath>\n\t\t\t<ChoiceParameterLinks>\n\t\t\t\t<xr:Link>\n\t\t\t\t\t<xr:Name>Отбор.Владелец</xr:Name>\n\t\t\t\t\t<xr:DataPath xsi:type=\"xs:string\">Объект.Партнер</xr:DataPath>\n\t\t\t\t\t<xr:ValueChange>Clear</xr:ValueChange>\n\t\t\t\t</xr:Link>\n\t\t\t</ChoiceParameterLinks>\n\t\t\t<ContextMenu name=\"КонтактноеЛицоКонтекстноеМеню\" id=\"5\"/>\n\t\t\t<ExtendedTooltip name=\"КонтактноеЛицоРасширеннаяПодсказка\" id=\"6\"/>\n\t\t</InputField>\n\t\t<InputField name=\"Источник\" id=\"7\">\n\t\t\t<DataPath>Источник</DataPath>\n\t\t\t<TypeLink>\n\t\t\t\t<xr:DataPath>Канал</xr:DataPath>\n\t\t\t\t<xr:LinkItem>0</xr:LinkItem>\n\t\t\t</TypeLink>\n\t\t\t<ContextMenu name=\"ИсточникКонтекстноеМеню\" id=\"8\"/>\n\t\t\t<ExtendedTooltip name=\"ИсточникРасширеннаяПодсказка\" id=\"9\"/>\n\t\t</InputField>\n\t\t<InputField name=\"ТоварыЕдиница\" id=\"10\">\n\t\t\t<DataPath>Объект.Товары.Номенклатура.Единица</DataPath>\n\t\t\t<ContextMenu name=\"ТоварыЕдиницаКонтекстноеМеню\" id=\"11\"/>\n\t\t\t<ExtendedTooltip name=\"ТоварыЕдиницаРасширеннаяПодсказка\" id=\"12\"/>\n\t\t</InputField>\n\t</ChildItems>\n\t<Attributes>\n\t\t<Attribute name=\"Объект\" id=\"20\">\n\t\t\t<Type>\n\t\t\t\t<v8:Type>cfg:DocumentObject.Заказ</v8:Type>\n\t\t\t</Type>\n\t\t\t<MainAttribute>true</MainAttribute>\n\t\t\t<SavedData>true</SavedData>\n\t\t</Attribute>\n\t\t<Attribute name=\"Канал\" id=\"21\">\n\t\t\t<Type>\n\t\t\t\t<v8:Type>cfg:CatalogRef.Каналы</v8:Type>\n\t\t\t</Type>\n\t\t\t<SavedData>true</SavedData>\n\t\t</Attribute>\n\t\t<Attribute name=\"Источник\" id=\"22\">\n\t\t\t<Type>\n\t\t\t\t<v8:Type>cfg:CatalogRef.Каналы</v8:Type>\n\t\t\t</Type>\n\t\t</Attribute>\n\t</Attributes>\n</Form>\n"
+      }
+    },
+    {
+      "script": "cfe-init/scripts/cfe-init",
+      "args": {
+        "-Name": "Тест",
+        "-OutputDir": "{workDir}/cfe",
+        "-ConfigPath": "{workDir}"
+      }
+    }
+  ],
+  "params": {
+    "extensionPath": "cfe",
+    "object": "Document.Заказ.Form.ФормаДокумента"
+  }
+}

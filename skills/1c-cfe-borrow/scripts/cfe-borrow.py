@@ -433,6 +433,31 @@ def borrowed_child_names(obj_content):
     return attr_names, ts_names
 
 
+def linked_attribute_blocks(src_form_content, indent, skip_names=()):
+    """Реквизиты формы, на которые ссылаются связи элементов (xr:DataPath в TypeLink, ChoiceParameterLinks):
+    описания из исходной формы с нужным отступом. Без них заимствованная форма не загружается - "Неверный путь к
+    полю" (форма партнера УТ 11.5, TypeLink на реквизит КаналПервичногоИнтереса, 17.10.2026). Типы реквизитов
+    берутся из основной конфигурации, заимствовать объекты типов не нужно."""
+    top = re.search(r'(?s)\n\t<Attributes>(.*?)\n\t</Attributes>', src_form_content.replace('\r\n', '\n'))
+    if top is None:
+        return []
+    names = []
+    for path in re.findall(r'<xr:DataPath[^>]*>([^<]+)</xr:DataPath>', src_form_content):
+        head = path.strip().split('.')[0].strip()
+        if head and head not in names and head not in skip_names:
+            names.append(head)
+    out = []
+    for m in re.finditer(r'(?s)(\t*)<Attribute name="([^"]+)"[^>]*>.*?</Attribute>', top.group(1)):
+        if m.group(2) not in names:
+            continue
+        base = len(m.group(1))
+        for raw_line in m.group(0).split('\n'):
+            stripped = raw_line.lstrip('\t')
+            depth = len(raw_line) - len(stripped) - base
+            out.append(indent + '\t' * max(0, depth) + stripped)
+    return out
+
+
 def main_attribute_blocks(src_form_content, indent):
     """Блоки UseAlways и Columns основного реквизита исходной формы с нужным отступом."""
     body = None
@@ -671,6 +696,21 @@ def main():
                 prop_val = source_props.get(prop_name, "false")
                 lines.append(f"\t\t\t<{prop_name}>{prop_val}</{prop_name}>")
 
+        if type_name == "DefinedType":
+            # без Type заимствованный определяемый тип пуст: реквизит табличной части с таким типом "не
+            # суммируемый" и форма с итогом по нему не загружается (заказ клиента УТ 11.5, Объект.Товары.TotalСумма,
+            # 17.10.2026) - тип копируется из исходного объекта
+            src_dt = os.path.join(cfg_dir, "DefinedTypes", f"{obj_name}.xml")
+            if os.path.isfile(src_dt):
+                with open(src_dt, "r", encoding="utf-8-sig") as fh:
+                    dt_text = fh.read().replace("\r\n", "\n")
+                dt_type = re.search(r"(?s)\n(\t*)<Type>.*?</Type>", dt_text)
+                if dt_type:
+                    base = len(dt_type.group(1))
+                    for raw_line in dt_type.group(0).strip("\n").split("\n"):
+                        stripped = raw_line.lstrip("\t")
+                        lines.append("\t\t\t" + "\t" * max(0, len(raw_line) - len(stripped) - base) + stripped)
+
         lines.append("\t\t</Properties>")
 
         if type_name in TYPES_WITH_CHILD_OBJECTS:
@@ -849,7 +889,10 @@ def main():
                 seg1 = segments[1]
                 if seg1 in STANDARD_FIELDS:
                     continue
-                deep_paths.append({"ObjectAttr": seg0, "SubAttr": seg1})
+                deep = {"ObjectAttr": seg0, "SubAttr": seg1}
+                if len(segments) >= 3 and segments[2] not in STANDARD_FIELDS:
+                    deep["Sub2"] = segments[2]
+                deep_paths.append(deep)
 
         # Also collect from TitleDataPath
         for m in re.finditer(r'<TitleDataPath>[^<]*\b\u041e\u0431\u044a\u0435\u043a\u0442\.(\w+(?:\.\w+)*)</TitleDataPath>', content):
@@ -880,7 +923,7 @@ def main():
         seen = set()
         unique_deep = []
         for dp in deep_paths:
-            key = f"{dp['ObjectAttr']}.{dp['SubAttr']}"
+            key = f"{dp['ObjectAttr']}.{dp['SubAttr']}.{dp.get('Sub2', '')}"
             if key not in seen:
                 seen.add(key)
                 unique_deep.append(dp)
@@ -1325,6 +1368,52 @@ def main():
                             borrowed_files.append(s_target_file)
                             info(f"  Auto-borrowed (deep): {srt['TypeName']}.{srt['ObjName']}")
 
+        # Step 6: пути через колонку табличной части к реквизиту справочника (Объект.Товары.Номенклатура.ЕдиницаИзмерения):
+        # без заимствованного справочника с этим реквизитом форма не загружается - "Неверный путь к данным" (форма
+        # заказа клиента УТ 11.5, 17.10.2026)
+        if mode == "Form" and deep_paths:
+            ts_deep = {}
+            for dp in deep_paths:
+                if dp["ObjectAttr"] in ts_names and dp.get("Sub2"):
+                    ts_deep.setdefault((dp["ObjectAttr"], dp["SubAttr"]), set()).add(dp["Sub2"])
+            for (ts_name, col_name), sub2_names in ts_deep.items():
+                ts_info = next((ts for ts in src_ts if ts["Name"] == ts_name), None)
+                col = next((c for c in (ts_info or {}).get("Attributes", []) if c["Name"] == col_name), None)
+                if not col:
+                    continue
+                ref = re.search(r'cfg:(\w+)Ref\.(\w+)', col["TypeXml"])
+                if not ref or ref.group(1) not in CHILD_TYPE_DIR_MAP:
+                    continue
+                t_type, t_name = ref.group(1), ref.group(2)
+                if not test_object_borrowed(t_type, t_name):
+                    t_src = read_source_object(t_type, t_name)
+                    t_xml = build_borrowed_object_xml(t_type, t_name, t_src["Uuid"], t_src["Properties"])
+                    t_dir = os.path.join(ext_dir, CHILD_TYPE_DIR_MAP[t_type])
+                    os.makedirs(t_dir, exist_ok=True)
+                    t_file = os.path.join(t_dir, f"{t_name}.xml")
+                    save_text_bom(t_file, t_xml)
+                    add_to_child_objects(t_type, t_name)
+                    borrowed_files.append(t_file)
+                    info(f"  Auto-borrowed for tabular deep path: {t_type}.{t_name}")
+                sub_resolved = resolve_source_attributes(t_type, t_name, {n: True for n in sub2_names})
+                if sub_resolved["Attributes"]:
+                    merge_attributes_into_object(t_type, t_name, sub_resolved["Attributes"])
+                    for srt in collect_reference_types([sa["TypeXml"] for sa in sub_resolved["Attributes"]]):
+                        if srt["TypeName"] not in CHILD_TYPE_DIR_MAP or test_object_borrowed(srt["TypeName"], srt["ObjName"]):
+                            continue
+                        s_src_file = os.path.join(cfg_dir, CHILD_TYPE_DIR_MAP[srt["TypeName"]], f"{srt['ObjName']}.xml")
+                        if not os.path.isfile(s_src_file):
+                            continue
+                        s_src = read_source_object(srt["TypeName"], srt["ObjName"])
+                        s_xml = build_borrowed_object_xml(srt["TypeName"], srt["ObjName"], s_src["Uuid"], s_src["Properties"])
+                        s_dir = os.path.join(ext_dir, CHILD_TYPE_DIR_MAP[srt["TypeName"]])
+                        os.makedirs(s_dir, exist_ok=True)
+                        s_file = os.path.join(s_dir, f"{srt['ObjName']}.xml")
+                        save_text_bom(s_file, s_xml)
+                        add_to_child_objects(srt["TypeName"], srt["ObjName"])
+                        borrowed_files.append(s_file)
+                        info(f"  Auto-borrowed (tabular deep): {srt['TypeName']}.{srt['ObjName']}")
+
         info("  Main attribute borrowing complete")
 
     def borrow_form(type_name, obj_name, form_name, borrow_main_attr=False):
@@ -1623,9 +1712,18 @@ def main():
             for extra_line in main_attribute_blocks(src_form_content, '\t\t\t'):
                 parts.append(extra_line + '\r\n')
             parts.append("\t\t</Attribute>\r\n")
+            for extra_line in linked_attribute_blocks(src_form_content, '\t\t', skip_names=("Объект",)):
+                parts.append(extra_line + '\r\n')
             parts.append("\t</Attributes>")
         else:
-            parts.append("\t<Attributes/>")
+            linked = linked_attribute_blocks(src_form_content, '\t\t')
+            if linked:
+                parts.append("\t<Attributes>\r\n")
+                for extra_line in linked:
+                    parts.append(extra_line + '\r\n')
+                parts.append("\t</Attributes>")
+            else:
+                parts.append("\t<Attributes/>")
         parts.append("\r\n")
 
         # BaseForm: same content, indented one more level
@@ -1661,9 +1759,18 @@ def main():
             for extra_line in main_attribute_blocks(src_form_content, '\t\t\t\t'):
                 parts.append(extra_line + '\r\n')
             parts.append("\t\t\t</Attribute>\r\n")
+            for extra_line in linked_attribute_blocks(src_form_content, '\t\t\t', skip_names=("Объект",)):
+                parts.append(extra_line + '\r\n')
             parts.append("\t\t</Attributes>")
         else:
-            parts.append("\t\t<Attributes/>")
+            linked = linked_attribute_blocks(src_form_content, '\t\t\t')
+            if linked:
+                parts.append("\t\t<Attributes>\r\n")
+                for extra_line in linked:
+                    parts.append(extra_line + '\r\n')
+                parts.append("\t\t</Attributes>")
+            else:
+                parts.append("\t\t<Attributes/>")
         parts.append("\r\n")
         parts.append("\t</BaseForm>\r\n")
         parts.append("</Form>")
@@ -1784,13 +1891,25 @@ def main():
                 borrowed_files.append(target_file)
 
             has_bma = borrow_main_attribute_mode is not None
+            bma_mode = borrow_main_attribute_mode
+            if not has_bma:
+                # связи элементов на Объект.* без заимствованного основного реквизита не загружаются ("Неверный
+                # путь к полю - Объект.Партнер", форма заказа клиента УТ; Объект.Ref, форма контрагента Демо) -
+                # основной реквизит заимствуется сам в режиме Form
+                src_form_xml = os.path.join(cfg_dir, CHILD_TYPE_DIR_MAP[type_name], obj_name, "Forms", form_name,
+                                            "Ext", "Form.xml")
+                if os.path.isfile(src_form_xml):
+                    with open(src_form_xml, "r", encoding="utf-8-sig") as fh:
+                        if re.search(r"<xr:DataPath[^>]*>\s*Объект\.", fh.read()):
+                            has_bma, bma_mode = True, "Form"
+                            info("  Links to Объект.* found - main attribute borrowed automatically (mode Form)")
             form_files = borrow_form(type_name, obj_name, form_name, borrow_main_attr=has_bma)
             borrowed_files.extend(form_files)
             borrowed_count += 1
 
             # Borrow main attribute if requested
             if has_bma:
-                borrow_main_attribute(type_name, obj_name, form_name, borrow_main_attribute_mode)
+                borrow_main_attribute(type_name, obj_name, form_name, bma_mode)
         else:
             # --- Object borrowing ---
             attr_names = [n.strip() for n in (args.Attributes or "").split(",") if n.strip()]
