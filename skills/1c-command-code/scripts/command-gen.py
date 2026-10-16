@@ -358,9 +358,16 @@ class Gen:
                      f"\tЗаполнитьЗначенияСвойств({tt}.Добавить(), Выборка);", "КонецЦикла;", ""]
         while fill and not fill[-1]:
             fill.pop()
-        if has_method(obj_dst, "ОбработкаЗаполнения"):
+        base_sig = re.search(r"(?im)^\s*Процедура\s+ОбработкаЗаполнения\s*\(([^)]*)\)", obj_dst)
+        if base_sig:
+            # сигнатура перехватчика - как у типового обработчика: в УТ 11.5 он двухпараметровый
+            # (ДанныеЗаполнения, СтандартнаяОбработка), перехватчик с тремя параметрами не вызывается (ut-cmd-2 16.10.2026)
+            params = [p.strip() for p in base_sig.group(1).split(",") if p.strip()]
+            data_param = re.sub(r"^Знач\s+", "", params[0]) if params else "ДанныеЗаполнения"
+            if data_param != "ДанныеЗаполнения":
+                fill = [re.sub(r"\bДанныеЗаполнения\b", data_param, ln) for ln in fill]
             head = ['&После("ОбработкаЗаполнения")',
-                    f"Процедура {self.prefix}ОбработкаЗаполнения(ДанныеЗаполнения, ТекстЗаполнения, СтандартнаяОбработка)"]
+                    f"Процедура {self.prefix}ОбработкаЗаполнения({', '.join(params)})"]
         else:
             head = ["Процедура ОбработкаЗаполнения(ДанныеЗаполнения, ТекстЗаполнения, СтандартнаяОбработка)"]
         dst_attrs = [a for a in header if a not in dst["std"]] + [tb["target"] for tb in c.get("tables", [])]
