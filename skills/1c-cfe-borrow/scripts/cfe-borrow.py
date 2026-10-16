@@ -1148,6 +1148,17 @@ def main():
         resolved = resolve_source_attributes(type_name, obj_name, first_level_names)
         src_attrs = resolved["Attributes"]
         src_ts = resolved["TabularSections"]
+        if mode == "Names":
+            # имя, которого нет у объекта, раньше молча пропускалось: "-Attributes All" заимствовал 0 реквизитов,
+            # и присваивания в модуле расширения уходили в локальные переменные (cmd-4 16.10.2026)
+            found = {a["Name"] for a in src_attrs} | {t["Name"] for t in src_ts}
+            unknown = [n for n in form_name if n not in found]
+            if unknown:
+                every = resolve_source_attributes(type_name, obj_name, None)
+                have = sorted(a["Name"] for a in every["Attributes"]) + sorted(t["Name"] for t in every["TabularSections"])
+                print(f"У {type_name}.{obj_name} нет реквизитов или табличных частей: {', '.join(unknown)}. "
+                      f"Есть: {', '.join(have)}. Все сразу - -Attributes All.", file=sys.stderr)
+                sys.exit(1)
         extra_props = resolved["ExtraProps"]
         info(f"  Resolved: {len(src_attrs)} attributes, {len(src_ts)} tabular section(s)")
 
@@ -1783,10 +1794,11 @@ def main():
         else:
             # --- Object borrowing ---
             attr_names = [n.strip() for n in (args.Attributes or "").split(",") if n.strip()]
+            attr_mode = "All" if [n.lower() for n in attr_names] == ["all"] else "Names"
             if attr_names and test_object_borrowed(type_name, obj_name):
                 # объект уже в расширении: его XML не пересоздается, иначе пропадут добавленные свойства
                 # (RegisterRecords, свои реквизиты); добавляются только недостающие реквизиты
-                borrow_main_attribute(type_name, obj_name, attr_names, "Names")
+                borrow_main_attribute(type_name, obj_name, attr_names, attr_mode)
                 borrowed_count += 1
                 continue
             info(f"Borrowing {type_name}.{obj_name}...")
@@ -1808,7 +1820,7 @@ def main():
             borrowed_files.append(target_file)
             borrowed_count += 1
             if attr_names:
-                borrow_main_attribute(type_name, obj_name, attr_names, "Names")
+                borrow_main_attribute(type_name, obj_name, attr_names, attr_mode)
 
     # --- Save modified Configuration.xml ---
     save_xml_bom(tree, ext_resolved)

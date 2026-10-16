@@ -1579,6 +1579,20 @@ function Borrow-MainAttribute {
 	$srcTS = $resolved.TabularSections
 	$extraProps = $resolved.ExtraProps
 	Info "  Resolved: $($srcAttrs.Count) attributes, $($srcTS.Count) tabular section(s)"
+	if ($mode -eq "Names") {
+		# имя, которого нет у объекта, раньше молча пропускалось: "-Attributes All" заимствовал 0 реквизитов (cmd-4 16.10.2026)
+		$found = @{}
+		foreach ($a in $srcAttrs) { $found[$a.Name] = $true }
+		foreach ($t in $srcTS) { $found[$t.Name] = $true }
+		$unknown = @($names | Where-Object { -not $found.ContainsKey($_) })
+		if ($unknown.Count -gt 0) {
+			$every = Resolve-SourceAttributes $typeName $objName $null
+			$have = @($every.Attributes | ForEach-Object { $_.Name } | Sort-Object) + @($every.TabularSections | ForEach-Object { $_.Name } | Sort-Object)
+			[Console]::Error.WriteLine("У ${typeName}.${objName} нет реквизитов или табличных частей: $($unknown -join ', '). " +
+				"Есть: $($have -join ', '). Все сразу - -Attributes All.")
+			exit 1
+		}
+	}
 
 	# Identify which FirstLevel names are TabularSections (for deep path filtering)
 	$tsNames = @{}
@@ -1968,10 +1982,12 @@ foreach ($item in $items) {
 		# --- Object borrowing (existing logic) ---
 		$attrNames = @()
 		if ($Attributes) { $attrNames = @($Attributes.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+		$attrMode = "Names"
+		if ($attrNames.Count -eq 1 -and $attrNames[0] -eq "All") { $attrMode = "All" }
 		if ($attrNames.Count -gt 0 -and (Test-ObjectBorrowed $typeName $objName)) {
 			# объект уже в расширении: его XML не пересоздается, иначе пропадут добавленные свойства
 			# (RegisterRecords, свои реквизиты); добавляются только недостающие реквизиты
-			Borrow-MainAttribute $typeName $objName "" "Names" $attrNames
+			Borrow-MainAttribute $typeName $objName "" $attrMode $attrNames
 			$borrowedCount++
 			continue
 		}
@@ -1997,7 +2013,7 @@ foreach ($item in $items) {
 		$script:borrowedFiles += $targetFile
 		$borrowedCount++
 		if ($attrNames.Count -gt 0) {
-			Borrow-MainAttribute $typeName $objName "" "Names" $attrNames
+			Borrow-MainAttribute $typeName $objName "" $attrMode $attrNames
 		}
 	}
 }
