@@ -1,0 +1,114 @@
+{
+  "name": "Отказ: реквизита нет у объекта - не выдумывать",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "CommonModule",
+        "name": "ОбщегоНазначенияКлиент",
+        "clientManagedApplication": true
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Пользователи"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "ВидыТоваров"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Товары",
+        "hierarchical": true,
+        "attributes": [
+          "Вид: CatalogRef.ВидыТоваров",
+          "Артикул: String(25)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "AccumulationRegister",
+        "name": "ОстаткиТоваров",
+        "registerType": "Balance",
+        "dimensions": [
+          "Товар: CatalogRef.Товары"
+        ],
+        "resources": [
+          "Количество: Number(15,3)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Заказ",
+        "attributes": [
+          "Ответственный: CatalogRef.Пользователи"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    }
+  ],
+  "noSnapshot": "отказ",
+  "input": {
+    "configPath": ".",
+    "outputDir": "src",
+    "name": "Х",
+    "object": "Catalog.Товары",
+    "selection": {
+      "conditions": [
+        {
+          "field": "ВидТовара",
+          "op": "empty"
+        }
+      ]
+    },
+    "action": {
+      "kind": "markDeletion"
+    }
+  },
+  "expectError": true,
+  "expect": {
+    "stderrContains": [
+      "'ВидТовара'",
+      "Вид",
+      "сообщи пользователю"
+    ]
+  }
+}

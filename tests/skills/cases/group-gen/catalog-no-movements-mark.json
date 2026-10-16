@@ -1,0 +1,108 @@
+{
+  "name": "Справочник без движений по регистру за год: временная таблица, без групп, пометка на удаление",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "CommonModule",
+        "name": "ОбщегоНазначенияКлиент",
+        "clientManagedApplication": true
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Пользователи"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "ВидыТоваров"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Catalog",
+        "name": "Товары",
+        "hierarchical": true,
+        "attributes": [
+          "Вид: CatalogRef.ВидыТоваров",
+          "Артикул: String(25)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "AccumulationRegister",
+        "name": "ОстаткиТоваров",
+        "registerType": "Balance",
+        "dimensions": [
+          "Товар: CatalogRef.Товары"
+        ],
+        "resources": [
+          "Количество: Number(15,3)"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Заказ",
+        "attributes": [
+          "Ответственный: CatalogRef.Пользователи"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "outputDir": "src",
+    "name": "ПометкаБезДвижений",
+    "object": "Catalog.Товары",
+    "selection": {
+      "noMovements": {
+        "register": "AccumulationRegister.ОстаткиТоваров",
+        "dimension": "Товар",
+        "days": 365
+      }
+    },
+    "columns": [
+      "Наименование",
+      "Артикул"
+    ],
+    "action": {
+      "kind": "markDeletion"
+    }
+  }
+}
