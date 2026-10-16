@@ -1,0 +1,60 @@
+{
+  "name": "Отказ: BasedOn в конфигурации на БСП (СозданиеНаОсновании) - команду не дает, ввод на основании через 1c-command-code",
+  "setup": "empty-config",
+  "noSnapshot": "отказ, объект не меняется",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Заказ"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Счет"
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "CommonModule",
+        "name": "СозданиеНаОсновании",
+        "server": true
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    }
+  ],
+  "params": {
+    "objectPath": "Documents/Счет.xml"
+  },
+  "input": {
+    "modify": {
+      "properties": {
+        "BasedOn": [
+          "Document.Заказ"
+        ]
+      }
+    }
+  },
+  "expectError": true,
+  "expect": {
+    "stderrContains": [
+      "1c-command-code",
+      "ДобавитьКомандыСозданияНаОсновании"
+    ]
+  }
+}

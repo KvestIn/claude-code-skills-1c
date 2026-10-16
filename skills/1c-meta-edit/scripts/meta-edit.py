@@ -2787,6 +2787,27 @@ def main():
 
     resolved_path = os.path.abspath(object_path)
 
+    # Ввод на основании через BasedOn в конфигурации на БСП не дает команды: формы БСП скрывают штатное подменю
+    # платформы и строят свое из ДобавитьКомандыСозданияНаОсновании менеджера (cmd-4 16.10.2026: BasedOn у
+    # заимствованного счета, команда в форме заказа не появилась). Флага-исключения нет: модель использует его сразу.
+    based_on_op = args.Operation in ("add-basedOn", "set-basedOn") or (
+        definition is not None and re.search(r'"(add|set)?[-_]?basedOn"', json.dumps(definition), re.I) is not None)
+    if based_on_op:
+        probe = os.path.dirname(resolved_path)
+        for _ in range(8):
+            if os.path.isfile(os.path.join(probe, "CommonModules", "СозданиеНаОсновании.xml")):
+                print("Конфигурация на БСП (подсистема СозданиеНаОсновании): BasedOn не дает команды \"Создать на "
+                      "основании\" - формы БСП скрывают подменю платформы и строят свое из процедуры "
+                      "ДобавитьКомандыСозданияНаОсновании модуля менеджера источника.\n"
+                      "Ввод на основании с заполнением делает генератор навыка 1c-command-code (kind \"basis\"):\n"
+                      "  python \"$HOME/.claude/skills/1c-command-code/scripts/command-gen.py\" -SpecPath <описание.json>\n"
+                      "Формат описания - Skill(skill=\"1c-command-code\").", file=sys.stderr)
+                sys.exit(1)
+            parent = os.path.dirname(probe)
+            if parent == probe:
+                break
+            probe = parent
+
     # --- Load XML ---
     xml_parser = etree.XMLParser(remove_blank_text=False)
     xml_tree = etree.parse(resolved_path, xml_parser)

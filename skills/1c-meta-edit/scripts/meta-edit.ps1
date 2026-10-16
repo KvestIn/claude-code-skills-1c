@@ -376,6 +376,26 @@ if (-not (Test-Path $ObjectPath)) {
 $resolvedPath = (Resolve-Path $ObjectPath).Path
 Assert-EditAllowed $resolvedPath "editable"
 
+# Ввод на основании через BasedOn в конфигурации на БСП не дает команды: формы БСП скрывают штатное подменю
+# платформы и строят свое из ДобавитьКомандыСозданияНаОсновании менеджера (cmd-4 16.10.2026). Флага-исключения нет.
+$basedOnOp = ($Operation -in @("add-basedOn", "set-basedOn")) -or
+	($DefinitionFile -and ($jsonText -match '"(add|set)?[-_]?basedOn"'))
+if ($basedOnOp) {
+	$probe = Split-Path $resolvedPath -Parent
+	for ($i = 0; $i -lt 8 -and $probe; $i++) {
+		if (Test-Path (Join-Path $probe "CommonModules\СозданиеНаОсновании.xml")) {
+			[Console]::Error.WriteLine(("Конфигурация на БСП (подсистема СозданиеНаОсновании): BasedOn не дает команды " +
+				"`"Создать на основании`" - формы БСП скрывают подменю платформы и строят свое из процедуры " +
+				"ДобавитьКомандыСозданияНаОсновании модуля менеджера источника.`n" +
+				"Ввод на основании с заполнением делает генератор навыка 1c-command-code (kind `"basis`"):`n" +
+				"  python `"`$HOME/.claude/skills/1c-command-code/scripts/command-gen.py`" -SpecPath <описание.json>`n" +
+				"Формат описания - Skill(skill=`"1c-command-code`")."))
+			exit 1
+		}
+		$probe = Split-Path $probe -Parent
+	}
+}
+
 # --- Load XML ---
 $script:xmlDoc = New-Object System.Xml.XmlDocument
 $script:xmlDoc.PreserveWhitespace = $true
