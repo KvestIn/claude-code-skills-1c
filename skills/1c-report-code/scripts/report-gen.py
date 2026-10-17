@@ -4,7 +4,7 @@
 # ресурсы, группировки, отборы и диаграмму, генератор сверяет имена с выгрузкой, сам строит текст запроса (параметр
 # виртуальной таблицы, суффиксы ресурсов, отбор по проведенным, реквизиты шапки из табличной части) и собирает отчет
 # навыками 1c-erf-init и 1c-skd-compile.
-# Оценка 16.10.2026: в отчетах в Остатки передавался период вместо даты, терялась диаграмма, группировка шла не по тем
+# Без генератора: в отчетах в Остатки передавался период вместо даты, терялась диаграмма, группировка шла не по тем
 # полям, нет отбора по проведенным; отсутствующий в регистре вид цены заменялся пустыми выдуманными объектами.
 # Запуск: python report-gen.py -SpecPath <spec.json>
 import argparse
@@ -33,6 +33,21 @@ AGG = {"Сумма", "Количество", "Максимум", "Минимум
 def fail(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def base_dir(spec_path, values):
+    """Каталог, от которого считаются относительные пути описания: рабочий каталог, если путь найден в нем, иначе
+    каталог файла описания. Раньше пути считались только от каталога описания, и описание, сохраненное в %TEMP%,
+    уводило доработку в %TEMP%/src/... мимо выгрузки."""
+    rel = [(v, cfg) for v, cfg in values if isinstance(v, str) and v and not Path(v).is_absolute()
+           and not re.match(r"^/[a-zA-Z](/|$)", v)]
+
+    def found(root):
+        return any((root / v / "Configuration.xml").is_file() if cfg else (root / v).exists() for v, cfg in rel)
+    for root in (Path.cwd(), spec_path.parent):
+        if found(root):
+            return root
+    return Path.cwd()
 
 
 def run_skill(rel, *args):
@@ -141,6 +156,20 @@ class Gen:
         types2 = sub["fields"][first][0] if first in sub["fields"] else [STD[kind][first]]
         return self.sub_type(types2, more, where)
 
+    def resource_column(self, meta, name, suffix, ts, label):
+        """Колонка источника для ресурса: у виртуальной таблицы регистра накопления - с суффиксом (Сумма -> СуммаОборот,
+        КоличествоОстаток), в выражениях тоже (выражение "Сумма - СуммаНДС" по Обороты)."""
+        if suffix and meta["kind"] == "AccumulationRegister":
+            base = re.sub(r"(Остаток|Оборот|Приход|Расход)$", "", name)
+            if base in meta["fields"] and meta["fields"][base][1] == "Resource":
+                return name if name != base else base + suffix
+            if name in meta["fields"] or name in STD.get(meta["kind"], {}):
+                return name
+            have = [n for n, (_, tag) in meta["fields"].items() if tag == "Resource"]
+            fail(f"resources '{label}': ресурса '{base}' у регистра нет. Ресурсы: {', '.join(have)}.")
+        col, _ = self.resolve(meta, name, f"resources '{label}'", ts)
+        return col
+
     def build(self):
         s = self.spec
         src = s.get("source") or fail("В описании нет source.")
@@ -200,38 +229,50 @@ class Gen:
             fields.append(self.field(al, typ, title, "@dimension"))
             dim_names.append(al)
         totals = []
+        used_names = set(dim_names)
+        default_agg = "Максимум" if src.get("sliceLast") else "Сумма"
         for r in res:
-            name = r["field"] if isinstance(r, dict) else r
-            title = r.get("title") if isinstance(r, dict) else None
-            agg = (r.get("agg") if isinstance(r, dict) else None) or "Сумма"
+            rd = r if isinstance(r, dict) else {"field": r}
+            # name (или alias) - имя колонки в отчете; без него - имя поля (было: два ресурса с полем
+            # Сумма и именами Выручка, Прибыль получили одно имя, итоги перепутались)
+            out_name = rd.get("name") or rd.get("alias")
+            src_field = rd.get("field")
+            if not src_field and not rd.get("expr"):
+                fail("resources: у ресурса нет field (поле источника) или expr (выражение).")
+            label = out_name or src_field
+            title = rd.get("title")
+            # срез последних - цены и курсы: сумма цен бессмысленна, по умолчанию максимум
+            agg = rd.get("agg") or default_agg
             if agg not in AGG:
-                fail(f"resources '{name}': agg - {', '.join(sorted(AGG))}.")
-            col = name
-            if isinstance(r, dict) and r.get("expr"):
-                expr = r["expr"]
+                fail(f"resources '{label}': agg - {', '.join(sorted(AGG))}.")
+            if rd.get("expr"):
+                if not label:
+                    fail("resources: у выражения укажи name - имя колонки в отчете (например Выручка).")
                 parts = []
-                for tok in re.split(r"([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё.]*)", expr):
+                for tok in re.split(r"([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё.]*)", rd["expr"]):
                     if re.fullmatch(r"[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё.]*", tok or ""):
-                        p_, _ = self.resolve(meta, tok, f"resources '{name}'.expr", ts)
-                        parts.append(f"{alias}.{p_}")
+                        parts.append(f"{alias}.{self.resource_column(meta, tok, suffix, ts, label)}")
                     else:
                         parts.append(tok)
-                al = name
+                al = label
+                if al in used_names:
+                    fail(f"resources: имя колонки '{al}' уже занято - задай другое name.")
+                used_names.add(al)
                 select.append(f"	{''.join(parts)} КАК {al}")
-                fields.append(self.field(al, r.get("type", "decimal(15,2)"), title, None))
+                fields.append(self.field(al, rd.get("type", "decimal(15,2)"), title, None))
                 totals.append(f"{al}: {agg}")
                 continue
+            col = self.resource_column(meta, src_field, suffix, ts, label)
             if suffix and meta["kind"] == "AccumulationRegister":
-                base = re.sub(r"(Остаток|Оборот|Приход|Расход)$", "", name)
-                if base not in meta["fields"] or meta["fields"][base][1] != "Resource":
-                    have = [n for n, (_, tag) in meta["fields"].items() if tag == "Resource"]
-                    fail(f"resources '{name}': ресурса '{base}' у регистра нет. Ресурсы: {', '.join(have)}.")
-                col = name if name != base else base + suffix
+                base = re.sub(r"(Остаток|Оборот|Приход|Расход)$", "", src_field)
                 typ = skd_type(meta["fields"][base][0])
             else:
-                col, typ = self.resolve(meta, name, f"resources '{name}'", ts)
-            al = (r.get("alias") if isinstance(r, dict) else None) or col.replace(".", "")
-            select.append(f"\t{alias}.{col} КАК {al}")
+                _, typ = self.resolve(meta, src_field, f"resources '{label}'", ts)
+            al = out_name or col.replace(".", "")
+            if al in used_names:
+                fail(f"resources: имя колонки '{al}' уже занято - задай другое name.")
+            used_names.add(al)
+            select.append(f"	{alias}.{col} КАК {al}")
             fields.append(self.field(al, typ or "decimal(15,2)", title, None))
             totals.append(f"{al}: {agg}")
 
@@ -335,13 +376,14 @@ def main():
     for k in ("configPath", "outputDir", "name", "source"):
         if k not in spec:
             fail(f"В описании нет ключа '{k}'.")
-    base = spec_path.parent
+
+    root = base_dir(spec_path, [(spec.get("configPath"), True), (spec.get("outputDir"), False)])
 
     def norm(value):
         m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
         if m and sys.platform == "win32":
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
-        return str(base / value)
+        return str(root / value)
     spec["configPath"], spec["outputDir"] = norm(spec["configPath"]), norm(spec["outputDir"])
     cfg, out = Path(spec["configPath"]).resolve(), Path(spec["outputDir"]).resolve()
     if not (cfg / "Configuration.xml").is_file():

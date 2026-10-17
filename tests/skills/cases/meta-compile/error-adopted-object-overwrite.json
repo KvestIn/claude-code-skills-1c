@@ -1,0 +1,20 @@
+{
+  "name": "Ошибка: заимствованный объект расширения не пересоздается (реквизит - через meta-edit)",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "writeFile": {
+        "path": "Catalogs/Номенклатура.xml",
+        "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<MetaDataObject xmlns=\"http://v8.1c.ru/8.3/MDClasses\" version=\"2.21\">\n\t<Catalog uuid=\"00000000-0000-0000-0000-000000000001\">\n\t\t<Properties>\n\t\t\t<ObjectBelonging>Adopted</ObjectBelonging>\n\t\t\t<Name>Номенклатура</Name>\n\t\t</Properties>\n\t</Catalog>\n</MetaDataObject>\n"
+      }
+    }
+  ],
+  "input": {
+    "type": "Catalog",
+    "name": "Номенклатура",
+    "attributes": [
+      "МинимальнаяПартия: Number(15,3)"
+    ]
+  },
+  "expectError": "заимствованный в расширение"
+}

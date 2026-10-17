@@ -8,7 +8,7 @@
 #     УстановитьДействие для поля без своего обработчика, УсловноеОформление;
 #   - &После на существующем обработчике поля, &Перед("ПередЗаписьюНаСервере") для переноса значения в объект.
 # Имени поля, элемента, табличной части или таблицы запроса, которых нет в выгрузке, - отказ со списком имеющихся.
-# Замер 15.10.2026: решения задач форм теряли баллы на путях к данным, выдуманных сигнатурах и заимствованных
+# Без генератора решения задач форм теряли баллы на путях к данным, выдуманных сигнатурах и заимствованных
 # формах, которые не загружаются.
 # Запуск: python form-code-gen.py -SpecPath <spec.json>
 import argparse
@@ -46,6 +46,44 @@ ITEM_TAGS = {"InputField", "UsualGroup", "Pages", "Page", "Table", "LabelDecorat
 def fail(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+# образец описания для сообщений об ошибке структуры: модель, не открывшая навык, подбирала ключи по одному
+# сообщению за запуск и сдавалась (восемь запусков, модуль так и не создан)
+EXAMPLE = """Образец описания (полный формат - Skill(skill="1c-form-code")):
+{
+  "configPath": "C:/путь/к/выгрузке",
+  "extension": {"path": "C:/путь/к/расширению", "name": "ICOM_Доработки"},
+  "object": "Catalog.Номенклатура",
+  "form": "ФормаЭлемента",
+  "elements": [
+    {"kind": "table", "name": "Цены", "title": "Цены", "after": "Наименование",
+     "query": "ВЫБРАТЬ Цены.ВидЦен КАК ВидЦен, Цены.Цена КАК Цена ИЗ ... ГДЕ ... = &Номенклатура",
+     "params": {"Номенклатура": "Объект.Ссылка"},
+     "columns": [{"name": "ВидЦен", "type": "CatalogRef.ВидыЦен"}, {"name": "Цена", "type": "number(15,2)"}]}
+  ]
+}
+Типы: string, string(N), number(N,M), date, dateTime, boolean, CatalogRef.X, DocumentRef.X, EnumRef.X.
+Файлы не созданы: исправь описание и запусти генератор снова."""
+
+
+def fail_spec(msg):
+    fail(msg + "\n\n" + EXAMPLE)
+
+
+
+def base_dir(spec_path, values):
+    """Каталог, от которого считаются относительные пути описания: рабочий каталог, если путь найден в нем, иначе
+    каталог файла описания. Раньше пути считались только от каталога описания, и описание, сохраненное в %TEMP%,
+    уводило доработку в %TEMP%/src/... мимо выгрузки."""
+    rel = [(v, cfg) for v, cfg in values if isinstance(v, str) and v and not Path(v).is_absolute()
+           and not re.match(r"^/[a-zA-Z](/|$)", v)]
+
+    def found(root):
+        return any((root / v / "Configuration.xml").is_file() if cfg else (root / v).exists() for v, cfg in rel)
+    for root in (Path.cwd(), spec_path.parent):
+        if found(root):
+            return root
+    return Path.cwd()
 
 
 def run_skill(rel, *args):
@@ -171,6 +209,9 @@ def indent(lines, n=1):
 
 
 def type_expr(config, t):
+    m = re.fullmatch(r"(string|number|decimal|date|datetime|boolean)(\(.*)?", t, re.I)
+    if m:
+        t = {"datetime": "dateTime"}.get(m.group(1).lower(), m.group(1).lower()) + (m.group(2) or "")
     m = re.fullmatch(r"string(?:\((\d+)\))?", t)
     if m:
         return call("ОбщегоНазначения.ОписаниеТипаСтрока", [m.group(1)]) if m.group(1) \
@@ -191,8 +232,7 @@ def type_expr(config, t):
         return [f'Новый ОписаниеТипов("{ru}.{m.group(2)}")']
     if t == "ValueTable":
         return ['Новый ОписаниеТипов("ТаблицаЗначений")']
-    fail(f"Тип '{t}' не поддержан: string, string(N), number(N,M), date, dateTime, boolean, CatalogRef.X, "
-         f"DocumentRef.X, EnumRef.X.")
+    fail_spec(f"Тип '{t}' не поддержан.")
 
 
 def humanize(name):
@@ -223,6 +263,29 @@ def meta_type(t):
     return {"date": "Дата", "dateTime": "ДатаВремя", "boolean": "Булево"}.get(t, t)
 
 
+VIRTUAL_SUFFIXES = {"Остатки": ["Остаток"], "Обороты": ["Оборот", "Приход", "Расход"],
+                    "ОстаткиИОбороты": ["НачальныйОстаток", "КонечныйОстаток", "Оборот", "Приход", "Расход"]}
+
+
+def check_register_fields(config, text, ctx):
+    """Ресурс виртуальной таблицы регистра накопления называется с суффиксом (ВНаличииОстаток, СуммаОборот): голое
+    имя ресурса запрос не компилирует (ТоварыНаСкладахОстатки.ВНаличии в УТ 11.5)."""
+    pattern = (r"РегистрНакопления\.([\wА-Яа-яЁё]+)\.(Остатки|Обороты|ОстаткиИОбороты)\s*\([^()]*(?:\([^()]*\)[^()]*)*\)"
+               r"\s+КАК\s+([\wА-Яа-яЁё]+)")
+    for reg, vt, alias in re.findall(pattern, text, re.I):
+        path = Path(config) / "AccumulationRegisters" / f"{reg}.xml"
+        if not path.is_file():
+            continue
+        xml = path.read_text(encoding="utf-8-sig", errors="replace")
+        resources = set(re.findall(r"<Resource\b.*?<Name>([^<]+)</Name>", xml, re.S))
+        vt_key = next(k for k in VIRTUAL_SUFFIXES if k.lower() == vt.lower())
+        for field in set(re.findall(rf"\b{re.escape(alias)}\.([\wА-Яа-яЁё]+)", text)):
+            if field in resources:
+                hint = ", ".join(field + s for s in VIRTUAL_SUFFIXES[vt_key])
+                fail(f"{ctx}: в виртуальной таблице {reg}.{vt_key} ресурс {field} называется с суффиксом: {hint}. "
+                     f"Исправь {alias}.{field} в запросе.")
+
+
 def query_lines(config, text, params, ctx):
     """Текст запроса: таблицы сверяются с выгрузкой, параметры - с описанием; РАЗРЕШЕННЫЕ в первом пакете."""
     for kind_ru, name in re.findall(r"(Документ|Справочник|РегистрНакопления|РегистрСведений|РегистрБухгалтерии|"
@@ -232,6 +295,7 @@ def query_lines(config, text, params, ctx):
             have = sorted(p.stem for p in (Path(config) / folder).glob("*.xml"))
             fail(f"{ctx}: в запросе таблица {kind_ru}.{name}, такого объекта нет. Объекты {folder}: "
                  f"{', '.join(have[:80])}{' ...' if len(have) > 80 else ''}")
+    check_register_fields(config, text, ctx)
     used = set(re.findall(r"&([\wА-Яа-яЁё]+)", text))
     if used != set(params):
         fail(f"{ctx}: параметры запроса {sorted(used)} не совпадают с params {sorted(params)}.")
@@ -274,7 +338,7 @@ class Gen:
 
     # имена и позиции
     def full(self, n):
-        # имя уже с префиксом (свой "ICOM_" или префикс расширения) второй раз не префиксуется: в ext-1 16.10.2026
+        # имя уже с префиксом (свой "ICOM_" или префикс расширения) второй раз не префиксуется: было,
         # реквизит "ICOM_КомментарийДляСклада" стал "ICOM_WarehouseComments_ICOM_..." - второй реквизит рядом
         if n.startswith(self.prefix) or re.match(r"^[A-Za-z][A-Za-z0-9]*_", n):
             return n
@@ -378,7 +442,7 @@ class Gen:
                     self.check_data("Объект." + el[key], f"Поле '{el['name']}'.{key} ({what})")
             if el.get("load"):
                 # реквизит, созданный ИзменитьРеквизиты, компилятору неизвестен: обращение по имени дает
-                # "Переменная не определена" или молча заводит локальную переменную (проверка 15.10.2026)
+                # "Переменная не определена" или молча заводит локальную переменную
                 self.loads.append(f"ЭтотОбъект[{q(n)}] = Объект.{el['load']};")
             if el.get("save"):
                 self.before_write.append(f"ТекущийОбъект.{el['save']} = ЭтотОбъект[{q(n)}];")
@@ -583,7 +647,7 @@ class Gen:
     # события
     def add_intercept(self, ic):
         """Перехват существующего метода типовой формы: После, Перед, Вместо (со ПродолжитьВызов).
-        Закрывает случай, ради которого модель ставила перехватчик в пустой модуль формы вручную (form-3 16.10.2026)."""
+        Закрывает случай, ради которого модель ставила перехватчик в пустой модуль формы вручную."""
         method, kind, body = ic.get("method"), ic.get("type", "После"), ic.get("body") or []
         if kind not in ("После", "Перед", "Вместо"):
             fail(f"intercepts.type - После, Перед или Вместо, получено '{kind}'.")
@@ -685,7 +749,7 @@ class Gen:
         folder = KINDS[self.kind][0]
         if not (ext / "Configuration.xml").is_file():
             # путь к каталогу, где лежат расширения, а не к самому расширению: новое пустое расширение рядом с
-            # существующими загружается второй раз (задача ext-2 15.10.2026, лишние Configuration.xml, Languages, Roles)
+            # существующими загружается второй раз (лишние Configuration.xml, Languages, Roles)
             if ext.is_dir() and any(ext.iterdir()):
                 found = sorted(str(c.parent) for c in ext.glob("*/Configuration.xml")) +                     sorted(str(c.parent) for c in ext.glob("*/*/Configuration.xml"))
                 fail(f"extension.path {ext} - не каталог расширения (в нем нет Configuration.xml), и он не пустой. "
@@ -713,7 +777,7 @@ class Gen:
                 fail(f"Элемент '{n}' уже есть на форме - выбери другое имя.")
         text, xml_events = self.module()
         if not text:
-            fail("Описание пустое: нет elements, onChange, appearance, intercepts.")
+            fail_spec("Описание пустое: нет elements, onChange, appearance, intercepts.")
 
         form_dir = ext / folder / self.name / "Forms" / spec["form"]
         mod = form_dir / "Ext" / "Form" / "Module.bsl"
@@ -734,7 +798,7 @@ class Gen:
                 run_skill("1c-meta-edit/scripts/meta-edit.py", "-ObjectPath", obj_xml, "-Operation", "add-attribute",
                           "-Value", f"{self.new_attrs[a['name']]}: {meta_type(a['type'])}")
                 # без заголовка навык строит синоним из полного имени с префиксом ("Custom extension_комментарий
-                # для склада", задача ext-1 15.10.2026) - синоним задается всегда, по умолчанию из имени без префикса
+                # для склада") - синоним задается всегда, по умолчанию из имени без префикса
                 title = a.get("title") or humanize(a["name"])
                 run_skill("1c-meta-edit/scripts/meta-edit.py", "-ObjectPath", obj_xml, "-Operation",
                           "modify-attribute", "-Value", f"{self.new_attrs[a['name']]}: synonym={title}")
@@ -750,7 +814,7 @@ class Gen:
         return mod, xml_events
 
     def bad_kind(self, el):
-        fail(f"Элемент '{el.get('name')}': kind '{el.get('kind')}' не поддержан: group, field, label, table, button.")
+        fail_spec(f"Элемент '{el.get('name')}': kind '{el.get('kind')}' не поддержан: group, field, label, table, button.")
 
 
 def write_bsl(path, text):
@@ -767,17 +831,21 @@ def main():
     try:
         spec = json.loads(spec_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as e:
-        fail(f"Описание {spec_path} - не JSON: {e}")
+        fail(f"Описание {spec_path} - не JSON: {e}. Пиши файл описания инструментом Write, а не через heredoc: "
+             f"обратная косая черта в heredoc ломает JSON.")
     for k in ("configPath", "object", "form", "extension"):
         if k not in spec:
-            fail(f"В описании нет ключа '{k}'.")
-    base = spec_path.parent
+            fail_spec(f"В описании нет ключа '{k}'.")
+    if not isinstance(spec["extension"], dict) or not spec["extension"].get("path") or not spec["extension"].get("name"):
+        fail_spec("extension - объект с ключами path (каталог расширения) и name (имя расширения).")
+
+    root = base_dir(spec_path, [(spec.get("configPath"), True), ((spec.get("extension") or {}).get("path"), False)])
 
     def norm(value):
         m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
         if m and sys.platform == "win32":
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
-        return str(base / value)
+        return str(root / value)
     spec["configPath"] = norm(spec["configPath"])
     spec["extension"]["path"] = norm(spec["extension"]["path"])
     if not (Path(spec["configPath"]) / "Configuration.xml").is_file():

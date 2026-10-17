@@ -6,7 +6,7 @@
 # навыка 1c-file-upload (ФайловаяСистемаКлиент.ЗагрузитьФайл, временное хранилище), чтение CSV/Excel/JSON на сервере,
 # поиск ссылок одним запросом на файл, запись, счетчики и таблица ошибок на форме.
 # Реквизит, измерение или колонка, которых нет в выгрузке, - отказ со списком имеющихся: недостающие данные не
-# выдумываются (замер 15.10.2026: ни одно из решений задач загрузки не было полностью рабочим; провалы - передача
+# выдумываются (без генератора ни одно из решений задач загрузки не было полностью рабочим; провалы - передача
 # файла, сопоставление с метаданными и умолчание об ограничениях).
 # Запуск: python load-gen.py -SpecPath <spec.json>
 import argparse
@@ -38,6 +38,21 @@ FORMATS = {"csv": ("csv", "Файлы CSV (*.csv)|*.csv|Все файлы (*.*)|
 def fail(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def base_dir(spec_path, values):
+    """Каталог, от которого считаются относительные пути описания: рабочий каталог, если путь найден в нем, иначе
+    каталог файла описания. Раньше пути считались только от каталога описания, и описание, сохраненное в %TEMP%,
+    уводило доработку в %TEMP%/src/... мимо выгрузки."""
+    rel = [(v, cfg) for v, cfg in values if isinstance(v, str) and v and not Path(v).is_absolute()
+           and not re.match(r"^/[a-zA-Z](/|$)", v)]
+
+    def found(root):
+        return any((root / v / "Configuration.xml").is_file() if cfg else (root / v).exists() for v, cfg in rel)
+    for root in (Path.cwd(), spec_path.parent):
+        if found(root):
+            return root
+    return Path.cwd()
 
 
 def run_skill(rel, *args):
@@ -360,7 +375,7 @@ def body_catalog(sp):
         out += ["\t\tЕсли Ссылка = Неопределено Тогда", f"\t\t\tЭлемент = {mgr}.СоздатьЭлемент();", "\t\tИначе",
                 "\t\t\tЭлемент = Ссылка.ПолучитьОбъект();", "\t\tКонецЕсли;"]
     out += [f"\t\tЭлемент.{key['attribute']} = {source_expr(sp, key['value'], obj['fields'][key['attribute']])};"]
-    # ключ уже присвоен выше; повтор его в set давал второе такое же присваивание (load-2, 15.10.2026)
+    # ключ уже присвоен выше; повтор его в set давал второе такое же присваивание
     rest = {a: v for a, v in t.get("set", {}).items() if a != key["attribute"]}
     out += set_lines(sp, "Элемент", rest, obj["fields"], "\t\t")
     out += ["", "\t\tПопытка", "\t\t\tЭлемент.Записать();", "\t\tИсключение"]
@@ -522,7 +537,7 @@ def form_json(sp):
 
 def check_output_dir(config, output):
     """Внешняя обработка не кладется в корень выгрузки и в каталоги ее объектов: платформа и проверки читают ее
-    как объект конфигурации, и загрузка конфигурации падает (load-1, 15.10.2026: обработка в DataProcessors/)."""
+    как объект конфигурации, и загрузка конфигурации падает (обработка в DataProcessors/)."""
     cfg, out = Path(config).resolve(), Path(output).resolve()
     if out == cfg or (cfg in out.parents and out.relative_to(cfg).parts[0] in METADATA_DIRS):
         fail(f"outputDir {output} внутри выгрузки конфигурации ({out.relative_to(cfg) if out != cfg else 'корень'}): "
@@ -545,11 +560,13 @@ def main():
         if k not in s:
             fail(f"В описании нет ключа '{k}'.")
 
+    root = base_dir(spec_path, [(s.get("configPath"), True), (s.get("outputDir"), False)])
+
     def norm(value):
         m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
         if m and sys.platform == "win32":
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
-        return str(spec_path.parent / value)
+        return str(root / value)
     s["configPath"], s["outputDir"] = norm(s["configPath"]), norm(s["outputDir"])
     check_output_dir(s["configPath"], s["outputDir"])
     if not (Path(s["configPath"]) / "Configuration.xml").is_file():

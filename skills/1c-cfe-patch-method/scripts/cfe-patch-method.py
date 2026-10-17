@@ -777,9 +777,9 @@ def main():
                     print("")
 
     # Первый перехватчик в пустом модуле заимствованной формы - путь, которым модель обходила генератор
-    # 1c-form-code и писала код формы руками (форма списка, form-3 16.10.2026: заготовка перехватчика, затем Edit).
+    # 1c-form-code и писала код формы руками (заготовка перехватчика, затем правка модуля).
     # Доработка формы и перехват ее методов (раздел intercepts) делает генератор; флага-исключения нет: модель
-    # повторяла вызов с ним сразу после отказа (form-3 16.10.2026).
+    # повторяла вызов с ним сразу после отказа.
     form_xml_path = os.path.join(os.path.dirname(os.path.dirname(bsl_file)), "Form.xml")
     module_empty = not (os.path.isfile(bsl_file) and read_bsl(bsl_file).strip())
     if is_form_module and module_empty and os.path.isfile(form_xml_path) \

@@ -3689,6 +3689,18 @@ types_no_sub_dir = [
 obj_sub_dir = os.path.join(type_dir, obj_name)
 ext_dir = os.path.join(obj_sub_dir, 'Ext')
 
+# Заимствованный объект расширения не пересоздается: новый файл без ObjectBelonging=Adopted становится
+# собственным объектом с именем типового, и платформа отвергает расширение ("Уже существует объект с именем
+# Справочник.Номенклатура": реквизит добавляли через meta-compile)
+if os.path.isfile(main_xml_path):
+    with open(main_xml_path, encoding='utf-8-sig', errors='replace') as fh:
+        if '<ObjectBelonging>Adopted</ObjectBelonging>' in fh.read(20000):
+            print(f"[ERROR] {main_xml_path} - объект, заимствованный в расширение; meta-compile его не пересоздает.\n"
+                  f"Реквизит, табличную часть или свойство заимствованного объекта добавляй навыком 1c-meta-edit, "
+                  f"например: -ObjectPath \"{main_xml_path}\" -Operation add-attribute "
+                  f"-Value \"Имя: Число(15,3)\". Файлы не изменены.", file=sys.stderr)
+            sys.exit(1)
+
 os.makedirs(type_dir, exist_ok=True)
 if obj_type not in types_no_sub_dir:
     os.makedirs(obj_sub_dir, exist_ok=True)

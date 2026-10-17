@@ -5,7 +5,7 @@
 # над отмеченными - замена реквизитов, пометка на удаление, перепроведение. Каждый объект обрабатывается в Попытка с
 # блокировкой, проведенный документ записывается с проведением, ошибки собираются в таблицу, итог - сообщением.
 # Обработка собирается навыками 1c-epf-scaffold, 1c-epf-add-form, 1c-form-compile.
-# Оценка 16.10.2026: решения групповых обработок обращались к реквизитам, которых нет в обработке, клали модуль не по
+# Без генератора решения групповых обработок обращались к реквизитам, которых нет в обработке, клали модуль не по
 # тому пути, вызывали Колонки.Добавить у реквизита формы, писали без обработки ошибок и без учета проведенности.
 # Запуск: python group-gen.py -SpecPath <spec.json>
 import argparse
@@ -32,6 +32,21 @@ ACTIONS = {"set", "markDeletion", "repost"}
 def fail(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def base_dir(spec_path, values):
+    """Каталог, от которого считаются относительные пути описания: рабочий каталог, если путь найден в нем, иначе
+    каталог файла описания. Раньше пути считались только от каталога описания, и описание, сохраненное в %TEMP%,
+    уводило доработку в %TEMP%/src/... мимо выгрузки."""
+    rel = [(v, cfg) for v, cfg in values if isinstance(v, str) and v and not Path(v).is_absolute()
+           and not re.match(r"^/[a-zA-Z](/|$)", v)]
+
+    def found(root):
+        return any((root / v / "Configuration.xml").is_file() if cfg else (root / v).exists() for v, cfg in rel)
+    for root in (Path.cwd(), spec_path.parent):
+        if found(root):
+            return root
+    return Path.cwd()
 
 
 def run_skill(rel, *args):
@@ -62,14 +77,39 @@ def read_meta(config, full):
         fail(f"Объекта {full} нет в выгрузке. {folder}: {', '.join(have[:100])}{' ...' if len(have) > 100 else ''}")
     obj = next(iter(ET.parse(path).getroot()))
     props = kid(obj, "Properties")
-    fields = {}
+    fields, tables, titles = {}, {}, {}
+
+    def types_of(c):
+        # число - с разрядностью: голый decimal в колонке формы не загружается (исключение XDTO на
+        # колонке СуммаДокумента в УНФ 3.0)
+        out = []
+        for t in c.iter():
+            if local(t.tag) == "Type" and t.text and t.text.strip():
+                v = t.text.strip().split(":")[-1]
+                if v == "decimal":
+                    nq = next((n for n in c.iter() if local(n.tag) == "NumberQualifiers"), None)
+                    dg, fr = kid(nq, "Digits"), kid(nq, "FractionDigits")
+                    v = f"decimal({dg.text if dg is not None else 15},{fr.text if fr is not None else 2})"
+                out.append(v)
+        return out
+
+    def title_of(c):
+        syn = kid(kid(c, "Properties"), "Synonym")
+        item = next((i for i in (syn if syn is not None else []) if (kid(i, "lang") is not None
+                                                                     and kid(i, "lang").text == "ru")), None)
+        return kid(item, "content").text if item is not None and kid(item, "content") is not None else None
     for c in (kid(obj, "ChildObjects") if kid(obj, "ChildObjects") is not None else []):
         if local(c.tag) in ("Attribute", "Dimension", "Resource"):
-            fields[kid(kid(c, "Properties"), "Name").text] = [
-                t.text.strip().split(":")[-1] for t in c.iter() if local(t.tag) == "Type" and t.text and t.text.strip()]
+            fields[kid(kid(c, "Properties"), "Name").text] = types_of(c)
+            titles[kid(kid(c, "Properties"), "Name").text] = title_of(c)
+        elif local(c.tag) == "TabularSection":
+            cols = kid(c, "ChildObjects")
+            tables[kid(kid(c, "Properties"), "Name").text] = {
+                kid(kid(a, "Properties"), "Name").text: types_of(a) for a in (cols if cols is not None else [])
+                if local(a.tag) == "Attribute"}
     hier = kid(props, "Hierarchical")
     htype = kid(props, "HierarchyType")
-    return {"kind": kind, "name": name, "fields": fields,
+    return {"kind": kind, "name": name, "fields": fields, "tables": tables, "titles": titles,
             "folders": hier is not None and hier.text == "true" and (htype is None or htype.text != "HierarchyOfItems")}
 
 
@@ -106,6 +146,7 @@ class Gen:
         if self.meta["kind"] not in KINDS:
             fail("object - Document.<Имя> или Catalog.<Имя>.")
         self.params = {p["name"]: p for p in s.get("params", [])}
+        self.in_query = set()  # параметры формы внутри выражений параметров запроса
         for p in self.params.values():
             form_type(p["type"])
             if p["type"].split(".")[0] in REF_RU:
@@ -114,12 +155,56 @@ class Gen:
                     fail(f"Параметр {p['name']}: типа {p['type']} нет в выгрузке.")
 
     def field_types(self, f):
+        if "." in f:
+            ts, _, col = f.partition(".")
+            cols = self.meta["tables"].get(ts)
+            if cols is None:
+                fail(f"Табличной части '{ts}' у {self.s['object']} нет. Табличные части: "
+                     f"{', '.join(sorted(self.meta['tables'])) or 'нет'}.")
+            if col not in cols:
+                fail(f"Реквизита '{col}' в табличной части {ts} нет. Реквизиты: {', '.join(sorted(cols))}.")
+            return cols[col]
         if f in self.meta["fields"]:
             return self.meta["fields"][f]
         if f in STD[self.meta["kind"]]:
             return STD[self.meta["kind"]][f]
         fail(f"Реквизита '{f}' у {self.s['object']} нет. Реквизиты: {', '.join(sorted(self.meta['fields']))}. "
              f"Нет данных - не выдумывай реквизит, сообщи пользователю.")
+
+    def uses_period(self):
+        """Период "с ... по" на форме: у документов по умолчанию да, с условием olderThanDays - нет."""
+        sel = self.s.get("selection", {})
+        older = any(c.get("op") == "olderThanDays" for c in sel.get("conditions", []))
+        return self.meta["kind"] == "Document" and sel.get("period", not older)
+
+
+    def days_expr(self, where, v):
+        """Число дней: целое или "param:<Имя>" (числовой параметр формы)."""
+        if isinstance(v, int) and not isinstance(v, bool):
+            return str(v)
+        if isinstance(v, str) and v.startswith("param:"):
+            if v[6:] not in self.params:
+                fail(f"{where}: параметра '{v[6:]}' нет в params.")
+            return v[6:]
+        fail(f"{where}: days - целое число или \"param:<Имя>\".")
+
+    def require_date(self, where, f):
+        if not set(self.field_types(f)) & {"date", "dateTime"}:
+            fail(f"{where}: реквизит {f} не дата (типы: {', '.join(self.field_types(f))}).")
+
+    def enum_literal(self, where, f, v):
+        """Перечисление.<Имя>.<Значение> -> ЗНАЧЕНИЕ(...), значение проверяется по выгрузке."""
+        m = re.fullmatch(r"(?:Перечисление|Enum)\.(\w+)\.(\w+)", v)
+        if not m:
+            return None
+        if f"EnumRef.{m.group(1)}" not in self.field_types(f):
+            fail(f"{where}: реквизит {f} не имеет типа перечисления {m.group(1)}.")
+        path = Path(self.config) / "Enums" / f"{m.group(1)}.xml"
+        names = re.findall(r"<EnumValue[^>]*>.*?<Name>([^<]+)</Name>", path.read_text(encoding="utf-8-sig"), re.S) \
+            if path.is_file() else []
+        if m.group(2) not in names:
+            fail(f"{where}: у перечисления {m.group(1)} нет значения {m.group(2)}. Значения: {', '.join(names)}.")
+        return f"ЗНАЧЕНИЕ(Перечисление.{m.group(1)}.{m.group(2)})"
 
     def empty_expr(self, f):
         types = self.field_types(f)
@@ -143,7 +228,7 @@ class Gen:
             self.field_types(c)
         qparams, batch, where = {}, [], ["НЕ Объекты.ПометкаУдаления"]
         if m["kind"] == "Document":
-            if sel.get("period", True):
+            if self.uses_period():
                 where.append("Объекты.Дата МЕЖДУ &НачалоПериода И &КонецПериода")
                 qparams["НачалоПериода"] = "НачалоПериода"
                 qparams["КонецПериода"] = "КонецДня(КонецПериода)"
@@ -163,6 +248,21 @@ class Gen:
                 else:
                     where.append(f"Объекты.{f} = &Пустое{f}")
                     qparams[f"Пустое{f}"] = q("")
+            elif op == "olderThanDays":
+                # "старше N дней": граница от начала текущего дня (без условия модель перекладывала его на выбор
+                # периода пользователем)
+                self.require_date(f"Условие {f}", f)
+                if str(c.get("days")).startswith("param:"):
+                    self.in_query.add(c["days"][6:])
+                where.append(f"Объекты.{f} < &Граница{f}")
+                qparams[f"Граница{f}"] = (f"НачалоДня(ТекущаяДатаСеанса()) - "
+                                         f"{self.days_expr(f'Условие {f}', c.get('days'))} * 86400")
+            elif op in ("<", ">", "<=", ">="):
+                self.field_types(f)
+                if c.get("param") not in self.params:
+                    fail(f"Условие {f} {op}: значение задай параметром формы (param), его нет в params.")
+                where.append(f"Объекты.{f} {op} &{c['param']}")
+                qparams[c["param"]] = c["param"]
             elif op in ("=", "<>"):
                 self.field_types(f)
                 if "param" in c:
@@ -172,12 +272,14 @@ class Gen:
                     qparams[c["param"]] = c["param"]
                 else:
                     v = c.get("value")
-                    lit = {True: "ИСТИНА", False: "ЛОЖЬ"}.get(v) if isinstance(v, bool) else None
+                    lit = {True: "ИСТИНА", False: "ЛОЖЬ"}.get(v) if isinstance(v, bool) else \
+                        self.enum_literal(f"Условие {f}", f, v) if isinstance(v, str) else None
                     if lit is None:
-                        fail(f"Условие {f}: value поддерживается только булево; другое значение задай через param.")
+                        fail(f"Условие {f}: value - булево или Перечисление.<Имя>.<Значение>; другое значение "
+                             f"задай через param.")
                     where.append(f"Объекты.{f} {op} {lit}")
             else:
-                fail(f"Условие {f}: op - '=', '<>' или 'empty'.")
+                fail(f"Условие {f}: op - '=', '<>', '<', '>', '<=', '>=', 'empty' или 'olderThanDays'.")
         nm = sel.get("noMovements")
         if nm:
             reg = read_meta(self.config, nm["register"])
@@ -214,9 +316,24 @@ class Gen:
             fail(f"action.kind - {', '.join(sorted(ACTIONS))}.")
         lines = ["ОбъектОбработки = СтрокаСписка.Ссылка.ПолучитьОбъект();", "ОбъектОбработки.Заблокировать();"]
         if kind == "set":
-            pairs = []
+            pairs, rows = [], []
             for f, v in (a.get("set") or fail("action.set: какие реквизиты чем заполнить.")).items():
                 self.field_types(f)
+                if isinstance(v, dict) and "addDays" in v:
+                    # сдвиг даты на N дней; пустая дата не меняется
+                    self.require_date(f"action.set {f}", f)
+                    n = self.days_expr(f"action.set {f}", v["addDays"])
+                    if "." in f:
+                        ts, _, col = f.partition(".")
+                        rows += [f"Для Каждого СтрокаТЧ Из ОбъектОбработки.{ts} Цикл",
+                                 f"\tЕсли ЗначениеЗаполнено(СтрокаТЧ.{col}) Тогда",
+                                 f"\t\tСтрокаТЧ.{col} = СтрокаТЧ.{col} + {n} * 86400;", "\tКонецЕсли;", "КонецЦикла;"]
+                    else:
+                        rows += [f"Если ЗначениеЗаполнено(ОбъектОбработки.{f}) Тогда",
+                                 f"\tОбъектОбработки.{f} = ОбъектОбработки.{f} + {n} * 86400;", "КонецЕсли;"]
+                    continue
+                if "." in f:
+                    fail(f"action.set {f}: реквизит табличной части меняется только сдвигом даты (addDays).")
                 if isinstance(v, str) and v.startswith("param:"):
                     pn = v[6:]
                     if pn not in self.params:
@@ -225,9 +342,9 @@ class Gen:
                 elif isinstance(v, bool):
                     pairs.append((f"ОбъектОбработки.{f}", "Истина" if v else "Ложь"))
                 else:
-                    fail(f"action.set {f}: значение - \"param:<Имя>\" или булево.")
-            width = max(len(l) for l, _ in pairs)
-            lines += [f"{l.ljust(width)} = {r};" for l, r in pairs] + [""]
+                    fail(f"action.set {f}: значение - \"param:<Имя>\", булево или {{\"addDays\": N}}.")
+            width = max((len(l) for l, _ in pairs), default=0)
+            lines += [f"{l.ljust(width)} = {r};" for l, r in pairs] + rows + [""]
             if m["kind"] == "Document":
                 lines += ["Если ОбъектОбработки.Проведен Тогда",
                           "\tОбъектОбработки.Записать(РежимЗаписиДокумента.Проведение);", "Иначе",
@@ -247,7 +364,7 @@ class Gen:
         text, qparams, cols = self.query()
         act, kind = self.action_lines()
         required = [p for p in self.params.values() if p.get("required", True)]
-        period = self.meta["kind"] == "Document" and s.get("selection", {}).get("period", True)
+        period = self.uses_period()
         confirm = s.get("confirm", True)
         question = s.get("question") or {"set": "Изменить отмеченные объекты?",
                                          "markDeletion": "Пометить на удаление отмеченные объекты?",
@@ -260,7 +377,8 @@ class Gen:
             out += ["\tСписок.Очистить();"]
         out += ["", "КонецПроцедуры", "", "#КонецОбласти", "", "#Область ОбработчикиКомандФормы", "",
                 "&НаКлиенте", "Процедура Заполнить(Команда)", ""]
-        checks = [(p["name"], p.get("title", p["name"])) for p in required if p["name"] in qparams]
+        checks = [(p["name"], p.get("title", p["name"])) for p in required
+                  if p["name"] in qparams or p["name"] in self.in_query]
         if period:
             checks = [("НачалоПериода", "Начало периода"), ("КонецПериода", "Конец периода")] + checks
         for n, t in checks:
@@ -269,7 +387,7 @@ class Gen:
                     "\t\tВозврат;", "\tКонецЕсли;", ""]
         out += ["\tЗаполнитьНаСервере();", "", "КонецПроцедуры", "", "&НаКлиенте", "Процедура ВыполнитьДействие(Команда)", ""]
         for p in required:
-            if p["name"] not in qparams:
+            if p["name"] not in qparams and p["name"] not in self.in_query:
                 out += [f"\tЕсли НЕ ЗначениеЗаполнено({p['name']}) Тогда",
                         f"\t\tОбщегоНазначенияКлиент.СообщитьПользователю(\"Заполните поле \"\"{p.get('title', p['name'])}\"\"\");",
                         "\t\tВозврат;", "\tКонецЕсли;", ""]
@@ -344,7 +462,7 @@ class Gen:
                                                                          "boolean": "boolean"}.get(t, "string(150)")
             if t.startswith("string") and types and types[0].startswith("decimal"):
                 t = types[0]
-            col_attrs.append({"name": c, "type": t, "title": c})
+            col_attrs.append({"name": c, "type": t, "title": self.meta["titles"].get(c) or c})
         attrs.append({"name": "Список", "type": "ValueTable", "title": "Объекты", "columns": col_attrs})
         attrs.append({"name": "Ошибки", "type": "ValueTable", "title": "Ошибки", "columns": [
             {"name": "Ссылка", "type": ref, "title": "Объект"}, {"name": "Сообщение", "type": "string(1000)",
@@ -382,11 +500,13 @@ def main():
         if k not in s:
             fail(f"В описании нет ключа '{k}'.")
 
+    root = base_dir(spec_path, [(s.get("configPath"), True), (s.get("outputDir"), False)])
+
     def norm(value):
         m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
         if m and sys.platform == "win32":
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
-        return str(spec_path.parent / value)
+        return str(root / value)
     s["configPath"], s["outputDir"] = norm(s["configPath"]), norm(s["outputDir"])
     cfg, out = Path(s["configPath"]).resolve(), Path(s["outputDir"]).resolve()
     if not (cfg / "Configuration.xml").is_file():

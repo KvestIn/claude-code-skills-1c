@@ -7,8 +7,8 @@
 #   kind "basis" - создание на основании (СозданиеНаОсновании): команда в менеджере источника, заполнение получателя
 #     в ОбработкаЗаполнения по сопоставлению реквизитов и табличных частей.
 # Имена объектов, реквизитов, табличных частей и видов команд сверяются с выгрузкой; чего нет - отказ со списком.
-# Оценка 16.10.2026: cmd-1 - команда с незарегистрированным видом "Действие" не появлялась; cmd-4 - заполнение есть,
-# а команды создания на основании нет.
+# Без генератора: команда с незарегистрированным видом "Действие" не появлялась; заполнение было,
+# а команды создания на основании не было.
 # Запуск: python command-gen.py -SpecPath <spec.json>
 import argparse
 import json
@@ -37,6 +37,21 @@ WRITE_MODES = {"НеЗаписывать", "Записывать", "Провод
 def fail(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def base_dir(spec_path, values):
+    """Каталог, от которого считаются относительные пути описания: рабочий каталог, если путь найден в нем, иначе
+    каталог файла описания. Раньше пути считались только от каталога описания, и описание, сохраненное в %TEMP%,
+    уводило доработку в %TEMP%/src/... мимо выгрузки."""
+    rel = [(v, cfg) for v, cfg in values if isinstance(v, str) and v and not Path(v).is_absolute()
+           and not re.match(r"^/[a-zA-Z](/|$)", v)]
+
+    def found(root):
+        return any((root / v / "Configuration.xml").is_file() if cfg else (root / v).exists() for v, cfg in rel)
+    for root in (Path.cwd(), spec_path.parent):
+        if found(root):
+            return root
+    return Path.cwd()
 
 
 def run_skill(rel, *args):
@@ -361,7 +376,7 @@ class Gen:
         base_sig = re.search(r"(?im)^\s*Процедура\s+ОбработкаЗаполнения\s*\(([^)]*)\)", obj_dst)
         if base_sig:
             # сигнатура перехватчика - как у типового обработчика: в УТ 11.5 он двухпараметровый
-            # (ДанныеЗаполнения, СтандартнаяОбработка), перехватчик с тремя параметрами не вызывается (ut-cmd-2 16.10.2026)
+            # (ДанныеЗаполнения, СтандартнаяОбработка), перехватчик с тремя параметрами не вызывается
             params = [p.strip() for p in base_sig.group(1).split(",") if p.strip()]
             data_param = re.sub(r"^Знач\s+", "", params[0]) if params else "ДанныеЗаполнения"
             if data_param != "ДанныеЗаполнения":
@@ -438,7 +453,7 @@ class Gen:
         for meta in (src, dst):
             self.borrow(f"{meta['kind']}.{meta['name']}")
         # реквизиты получателя заимствуются явно: без этого присваивание "Контрагент = ..." в модуле расширения
-        # молча заводит локальную переменную, а "Товары.Очистить()" не компилируется (проверка 16.10.2026)
+        # молча заводит локальную переменную, а "Товары.Очистить()" не компилируется
         dst_xml = (self.ext / KINDS[dst["kind"]][0] / f"{dst['name']}.xml").read_text(encoding="utf-8-sig")
         missing = [a for a in dst_attrs if f"<Name>{a}</Name>" not in dst_xml]
         if missing:
@@ -478,13 +493,14 @@ def main():
     for k in ("configPath", "extension", "commands"):
         if k not in spec:
             fail(f"В описании нет ключа '{k}'.")
-    base = spec_path.parent
+
+    root = base_dir(spec_path, [(spec.get("configPath"), True), ((spec.get("extension") or {}).get("path"), False)])
 
     def norm(value):
         m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
         if m and sys.platform == "win32":
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
-        return str(base / value)
+        return str(root / value)
     spec["configPath"] = norm(spec["configPath"])
     spec["extension"]["path"] = norm(spec["extension"]["path"])
     cfg, ext = Path(spec["configPath"]).resolve(), Path(spec["extension"]["path"]).resolve()

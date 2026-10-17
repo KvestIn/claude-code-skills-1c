@@ -1,0 +1,59 @@
+[
+ {
+  "object": "ОбщийМодуль.Продажи",
+  "status": "изменен",
+  "group": "code",
+  "file": "objects/001-ОбщийМодуль.Продажи.md",
+  "code": true,
+  "added": [],
+  "removed": [],
+  "properties": [
+   "Модуль"
+  ]
+ },
+ {
+  "object": "ОбщийМодуль.ICOM_Сервис",
+  "status": "только в основной",
+  "group": "added",
+  "file": "objects/002-ОбщийМодуль.ICOM_Сервис.md",
+  "code": false,
+  "added": [],
+  "removed": [],
+  "properties": []
+ },
+ {
+  "object": "Отчет.Устаревший",
+  "status": "только у поставщика",
+  "group": "removed",
+  "file": "objects/003-Отчет.Устаревший.md",
+  "code": false,
+  "added": [],
+  "removed": [],
+  "properties": []
+ },
+ {
+  "object": "Справочник.Партнеры",
+  "status": "изменен",
+  "group": "struct",
+  "file": "objects/004-Справочник.Партнеры.md",
+  "code": false,
+  "added": [
+   "Реквизит.ICOM_Ключевой",
+   "форма ФормаЭлемента: элемент ICOM_Ключевой"
+  ],
+  "removed": [],
+  "properties": [
+   "Подсказка"
+  ]
+ },
+ {
+  "object": "Обработка.Панель",
+  "status": "изменен",
+  "group": "values",
+  "file": "objects/005-Обработка.Панель.md",
+  "code": false,
+  "added": [],
+  "removed": [],
+  "properties": []
+ }
+]

@@ -1,0 +1,9 @@
+{
+  "name": "Отказ: не задана ни база, ни готовый отчет",
+  "runtimeOnly": "python",
+  "noSnapshot": "отказ",
+  "params": {
+    "outDir": "out"
+  },
+  "expectError": "Укажи базу"
+}

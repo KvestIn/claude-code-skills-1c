@@ -1,0 +1,25 @@
+{
+  "script": "1c-cf-vendor-diff/scripts/vendor-diff",
+  "setup": "empty-config",
+  "args": [
+    {
+      "flag": "-ReportFile",
+      "from": "workPath",
+      "field": "report",
+      "optional": true
+    },
+    {
+      "flag": "-ConfigPath",
+      "from": "workDir"
+    },
+    {
+      "flag": "-OutDir",
+      "from": "workPath",
+      "field": "outDir"
+    }
+  ],
+  "snapshot": {
+    "root": "workDir",
+    "normalizeUuids": true
+  }
+}

@@ -53,7 +53,7 @@ if (Test-Path $cfgFile) {
 
 # --- Resolve ConfigPath ---
 # Без -ConfigPath ищем выгрузку основной конфигурации в текущем каталоге и выше: расширение с нулевым
-# UUID языка не загружается в базу (06.10.2026, задачи на расширения: модель не передавала -ConfigPath).
+# UUID языка не загружается в базу (модель не передавала -ConfigPath).
 if (-not $ConfigPath) {
 	$probe = (Get-Location).Path
 	while ($probe) {

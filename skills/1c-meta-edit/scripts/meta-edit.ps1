@@ -377,7 +377,7 @@ $resolvedPath = (Resolve-Path $ObjectPath).Path
 Assert-EditAllowed $resolvedPath "editable"
 
 # Ввод на основании через BasedOn в конфигурации на БСП не дает команды: формы БСП скрывают штатное подменю
-# платформы и строят свое из ДобавитьКомандыСозданияНаОсновании менеджера (cmd-4 16.10.2026). Флага-исключения нет.
+# платформы и строят свое из ДобавитьКомандыСозданияНаОсновании менеджера. Флага-исключения нет.
 $basedOnOp = ($Operation -in @("add-basedOn", "set-basedOn")) -or
 	($DefinitionFile -and ($jsonText -match '"(add|set)?[-_]?basedOn"'))
 if ($basedOnOp) {
@@ -2706,7 +2706,7 @@ function Find-PropertyElement([string]$propName) {
 
 # Элемент сложного свойства (RegisterRecords, BasedOn...) или новый пустой в конце Properties. У объекта,
 # заимствованного в расширение, в Properties только ObjectBelonging, Name и ExtendedConfigurationObject: без
-# создания элемента set-registerRecords молча ничего не делал (14.10.2026, свой регистр в движениях
+# создания элемента set-registerRecords молча ничего не делал (свой регистр в движениях
 # заимствованного документа; загрузка в базы УТ и УНФ подтвердила, что такой элемент платформа принимает).
 function Ensure-PropertyElement([string]$propName) {
 	$propEl = Find-PropertyElement $propName

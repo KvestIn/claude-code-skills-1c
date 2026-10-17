@@ -7,7 +7,7 @@
 #     при необходимости регистрация объекта в УправлениеПечатьюПереопределяемый);
 #   variant "external" - внешняя печатная форма (дополнительная обработка БСП): обработка, макет, модуль объекта с
 #     СведенияОВнешнейОбработке и Печать с четырьмя параметрами.
-# Поле, которого нет в выгрузке, - отказ со списком имеющихся: недостающие данные не выдумываются (замер 15.10.2026:
+# Поле, которого нет в выгрузке, - отказ со списком имеющихся: недостающие данные не выдумываются (без генератора:
 # провалы "подход и полнота" и "контракты конфигурации" - 36 из 62).
 # Запуск: python print-form-gen.py -SpecPath <spec.json>
 import argparse
@@ -32,6 +32,21 @@ STD = {"Document": {"Номер", "Дата", "Ссылка", "Проведен"
 def fail(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def base_dir(spec_path, values):
+    """Каталог, от которого считаются относительные пути описания: рабочий каталог, если путь найден в нем, иначе
+    каталог файла описания. Раньше пути считались только от каталога описания, и описание, сохраненное в %TEMP%,
+    уводило доработку в %TEMP%/src/... мимо выгрузки."""
+    rel = [(v, cfg) for v, cfg in values if isinstance(v, str) and v and not Path(v).is_absolute()
+           and not re.match(r"^/[a-zA-Z](/|$)", v)]
+
+    def found(root):
+        return any((root / v / "Configuration.xml").is_file() if cfg else (root / v).exists() for v, cfg in rel)
+    for root in (Path.cwd(), spec_path.parent):
+        if found(root):
+            return root
+    return Path.cwd()
 
 
 def run_skill(rel, *args):
@@ -175,9 +190,15 @@ def query_text(spec, kind, name):
             fields.append(f"ДанныеОбъекта.{h['field']} КАК {alias(h['field'])}")
             seen.add(alias(h["field"]))
     aw = spec.get("amountInWords") or {}
+    table = spec.get("table")
+    totals = [c["field"] for c in (table or {}).get("columns", []) if c.get("total")]
+    # сумма прописью из реквизита шапки, которого нет в header, тоже выбирается запросом: иначе обращение
+    # Шапка.<поле> падает при печати (СуммаДокумента не попадала в выборку)
+    if aw.get("field") and aw["field"] not in totals and alias(aw["field"]) not in seen:
+        fields.append(f"ДанныеОбъекта.{aw['field']} КАК {alias(aw['field'])}")
+        seen.add(alias(aw["field"]))
     if aw.get("currency") and aw["currency"] not in seen:
         fields.append(f"ДанныеОбъекта.{aw['currency']} КАК {aw['currency']}")
-    table = spec.get("table")
     lines = []
     for i, f in enumerate(fields):
         lines.append(f"|	{f}" + ("," if i < len(fields) - 1 or table else ""))
@@ -447,22 +468,23 @@ def main():
     for k in ("variant", "configPath", "object", "id", "title"):
         if k not in spec:
             fail(f"В описании нет ключа '{k}'.")
-    # относительные пути - от каталога файла описания; путь Git Bash /c/... - в C:/... (в print-2 15.10.2026 модель
+    # относительные пути - от каталога файла описания; путь Git Bash /c/... - в C:/... (модель
     # указала /c/AI/.../demo2, Python в Windows прочитал его как C:\c\AI\..., и генератор отказал ложным "нет БСП")
-    base = spec_path.parent
+
+    root = base_dir(spec_path, [(spec.get("configPath"), True), ((spec.get("extension") or {}).get("path"), False), ((spec.get("external") or {}).get("outputDir"), False)])
 
     def norm(value):
         m = re.match(r"^/([a-zA-Z])(/.*)?$", value)
         if m and sys.platform == "win32":
             value = f"{m.group(1).upper()}:{m.group(2) or '/'}"
-        return str(base / value)
+        return str(root / value)
     spec["configPath"] = norm(spec["configPath"])
     for part, key in (("extension", "path"), ("external", "outputDir")):
         if spec.get(part, {}).get(key):
             spec[part][key] = norm(spec[part][key])
     if spec.get("external", {}).get("outputDir"):
         # внешняя форма в корне выгрузки или в каталогах ее объектов читается как объект конфигурации, и загрузка
-        # конфигурации падает (загрузка load-1, 15.10.2026: обработка в DataProcessors/)
+        # конфигурации падает (обработка в DataProcessors/)
         cfg, out = Path(spec["configPath"]).resolve(), Path(spec["external"]["outputDir"]).resolve()
         if out == cfg or (cfg in out.parents and out.relative_to(cfg).parts[0] in KIND_DIRS):
             fail(f"external.outputDir {out} внутри выгрузки конфигурации: внешнюю обработку клади в отдельный "

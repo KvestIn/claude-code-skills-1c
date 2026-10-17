@@ -1,0 +1,15 @@
+{
+  "name": "Сумма прописью из реквизита шапки, не перечисленного в header, выбирается запросом",
+  "runtimeOnly": "python",
+  "preRun": [
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "CommonModule", "name": "УправлениеПечатью", "server": true }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "CommonModule", "name": "УправлениеПечатьюПереопределяемый", "server": true }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } },
+    { "script": "meta-compile/scripts/meta-compile", "input": { "type": "Document", "name": "Реализация", "attributes": ["Контрагент: String(100)", "СуммаДокумента: Number(15,2)"], "tabularSections": [{ "name": "Товары", "attributes": ["Номенклатура: String(100)", "Количество: Number(15,3)", "Цена: Number(15,2)"] }] }, "args": { "-JsonPath": "{inputFile}", "-OutputDir": "{workDir}" } }
+  ],
+  "input": { "variant": "extension", "configPath": ".", "object": "Document.Реализация", "id": "ICOM_Акт", "title": "Акт",
+             "header": [ { "field": "Контрагент", "title": "Покупатель" } ],
+             "table": { "section": "Товары", "columns": [ { "field": "Номенклатура" }, { "field": "Количество", "total": true },
+                        { "field": "Сумма", "expr": "Количество * Цена", "total": true } ] },
+             "amountInWords": { "field": "СуммаДокумента" },
+             "extension": { "path": "ext", "name": "ICOM_Печать" } }
+}

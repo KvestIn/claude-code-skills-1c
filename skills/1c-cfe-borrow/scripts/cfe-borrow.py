@@ -436,7 +436,7 @@ def borrowed_child_names(obj_content):
 def linked_attribute_blocks(src_form_content, indent, skip_names=()):
     """Реквизиты формы, на которые ссылаются связи элементов (xr:DataPath в TypeLink, ChoiceParameterLinks):
     описания из исходной формы с нужным отступом. Без них заимствованная форма не загружается - "Неверный путь к
-    полю" (форма партнера УТ 11.5, TypeLink на реквизит КаналПервичногоИнтереса, 17.10.2026). Типы реквизитов
+    полю" (форма партнера УТ 11.5, TypeLink на реквизит КаналПервичногоИнтереса). Типы реквизитов
     берутся из основной конфигурации, заимствовать объекты типов не нужно."""
     top = re.search(r'(?s)\n\t<Attributes>(.*?)\n\t</Attributes>', src_form_content.replace('\r\n', '\n'))
     if top is None:
@@ -698,8 +698,8 @@ def main():
 
         if type_name == "DefinedType":
             # без Type заимствованный определяемый тип пуст: реквизит табличной части с таким типом "не
-            # суммируемый" и форма с итогом по нему не загружается (заказ клиента УТ 11.5, Объект.Товары.TotalСумма,
-            # 17.10.2026) - тип копируется из исходного объекта
+            # суммируемый" и форма с итогом по нему не загружается (заказ клиента УТ 11.5, Объект.Товары.TotalСумма)
+            # - тип копируется из исходного объекта
             src_dt = os.path.join(cfg_dir, "DefinedTypes", f"{obj_name}.xml")
             if os.path.isfile(src_dt):
                 with open(src_dt, "r", encoding="utf-8-sig") as fh:
@@ -823,7 +823,7 @@ def main():
     def borrow_template(type_name, obj_name, template_name):
         """Заимствует макет объекта: метаданные с ObjectBelonging=Adopted, копия содержимого Ext/ и запись
         <Template> в ChildObjects заимствованного объекта. Без записи в ChildObjects платформа макет при
-        загрузке расширения пропускает (06.10.2026: схема компоновки отчета в расширении не применялась)."""
+        загрузке расширения пропускает (схема компоновки отчета в расширении не применялась)."""
         dir_name = CHILD_TYPE_DIR_MAP[type_name]
         src_meta = os.path.join(cfg_dir, dir_name, obj_name, "Templates", f"{template_name}.xml")
         if not os.path.isfile(src_meta):
@@ -1043,7 +1043,7 @@ def main():
         if props_node is not None:
             # Свойства нумерации документа (NumberType, NumberLength, NumberAllowedLength, NumberPeriodicity)
             # не копируются: с ними платформа считает нумерацию заимствованного документа измененной и отвергает
-            # расширение - "отключать контролируемость свойства Нумератор недопустимо" (06.10.2026, 8.5.1,
+            # расширение - "отключать контролируемость свойства Нумератор недопустимо" (8.5.1,
             # Document._ДемоСчетНаОплатуПокупателю; без этих свойств расширение загружается).
             props_to_extract = [
                 "Hierarchical", "FoldersOnTop", "CodeLength", "DescriptionLength",
@@ -1193,7 +1193,7 @@ def main():
         src_ts = resolved["TabularSections"]
         if mode == "Names":
             # имя, которого нет у объекта, раньше молча пропускалось: "-Attributes All" заимствовал 0 реквизитов,
-            # и присваивания в модуле расширения уходили в локальные переменные (cmd-4 16.10.2026)
+            # и присваивания в модуле расширения уходили в локальные переменные
             found = {a["Name"] for a in src_attrs} | {t["Name"] for t in src_ts}
             unknown = [n for n in form_name if n not in found]
             if unknown:
@@ -1370,7 +1370,7 @@ def main():
 
         # Step 6: пути через колонку табличной части к реквизиту справочника (Объект.Товары.Номенклатура.ЕдиницаИзмерения):
         # без заимствованного справочника с этим реквизитом форма не загружается - "Неверный путь к данным" (форма
-        # заказа клиента УТ 11.5, 17.10.2026)
+        # заказа клиента УТ 11.5)
         if mode == "Form" and deep_paths:
             ts_deep = {}
             for dp in deep_paths:
@@ -1954,7 +1954,7 @@ def main():
     for f in borrowed_files:
         print(f"    - {f}")
     # модель доходит до заимствования формы и дальше пишет код формы руками, описание 1c-form-code не читая
-    # (задачи форм 16.10.2026, четыре прогона): вывод скрипта она читает всегда
+    # (на задачах форм): вывод скрипта она читает всегда
     if ".Form." in (args.Object or ""):
         print()
         print(FORM_CODE_HINT)

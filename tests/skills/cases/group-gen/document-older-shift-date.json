@@ -1,0 +1,103 @@
+{
+  "name": "Документы старше N дней не в статусе Закрыт: сдвиг даты в шапке и в строках табличной части",
+  "runtimeOnly": "python",
+  "preRun": [
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "CommonModule",
+        "name": "ОбщегоНазначенияКлиент",
+        "clientManagedApplication": true
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Enum",
+        "name": "СтатусыЗаказов",
+        "values": [
+          "Новый",
+          "Закрыт"
+        ]
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    },
+    {
+      "script": "meta-compile/scripts/meta-compile",
+      "input": {
+        "type": "Document",
+        "name": "Заказ",
+        "attributes": [
+          "Статус: EnumRef.СтатусыЗаказов",
+          "ДатаОтгрузки: Date"
+        ],
+        "tabularSections": {
+          "Товары": [
+            "ДатаОтгрузки: Date",
+            "Количество: Number(15,3)"
+          ]
+        }
+      },
+      "args": {
+        "-JsonPath": "{inputFile}",
+        "-OutputDir": "{workDir}"
+      }
+    }
+  ],
+  "input": {
+    "configPath": ".",
+    "outputDir": "src",
+    "name": "СдвигОтгрузки",
+    "object": "Document.Заказ",
+    "params": [
+      {
+        "name": "Дней",
+        "type": "number",
+        "title": "Сдвиг, дней"
+      },
+      {
+        "name": "СтаршеДней",
+        "type": "number",
+        "title": "Старше, дней"
+      }
+    ],
+    "selection": {
+      "conditions": [
+        {
+          "field": "Статус",
+          "op": "<>",
+          "value": "Перечисление.СтатусыЗаказов.Закрыт"
+        },
+        {
+          "field": "Дата",
+          "op": "olderThanDays",
+          "days": "param:СтаршеДней"
+        }
+      ]
+    },
+    "columns": [
+      "Дата",
+      "Номер",
+      "Статус",
+      "ДатаОтгрузки"
+    ],
+    "action": {
+      "kind": "set",
+      "set": {
+        "ДатаОтгрузки": {
+          "addDays": "param:Дней"
+        },
+        "Товары.ДатаОтгрузки": {
+          "addDays": "param:Дней"
+        }
+      }
+    }
+  }
+}

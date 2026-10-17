@@ -1299,7 +1299,7 @@ function Resolve-SourceAttributes {
 	if ($propsNode) {
 		# Свойства нумерации документа (NumberType, NumberLength, NumberAllowedLength, NumberPeriodicity)
 		# не копируются: с ними платформа считает нумерацию заимствованного документа измененной и отвергает
-		# расширение - "отключать контролируемость свойства Нумератор недопустимо" (06.10.2026, 8.5.1,
+		# расширение - "отключать контролируемость свойства Нумератор недопустимо" (8.5.1,
 		# Document._ДемоСчетНаОплатуПокупателю; без этих свойств расширение загружается).
 		$propsToExtract = @("Hierarchical","FoldersOnTop","CodeLength","DescriptionLength","CodeType","CodeAllowedLength")
 		foreach ($pName in $propsToExtract) {
@@ -1580,7 +1580,7 @@ function Borrow-MainAttribute {
 	$extraProps = $resolved.ExtraProps
 	Info "  Resolved: $($srcAttrs.Count) attributes, $($srcTS.Count) tabular section(s)"
 	if ($mode -eq "Names") {
-		# имя, которого нет у объекта, раньше молча пропускалось: "-Attributes All" заимствовал 0 реквизитов (cmd-4 16.10.2026)
+		# имя, которого нет у объекта, раньше молча пропускалось: "-Attributes All" заимствовал 0 реквизитов
 		$found = @{}
 		foreach ($a in $srcAttrs) { $found[$a.Name] = $true }
 		foreach ($t in $srcTS) { $found[$t.Name] = $true }

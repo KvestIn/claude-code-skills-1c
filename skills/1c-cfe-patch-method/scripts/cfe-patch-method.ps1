@@ -846,9 +846,9 @@ if ($isFormModule) {
 }
 
 # Первый перехватчик в пустом модуле заимствованной формы - путь, которым модель обходила генератор
-# 1c-form-code и писала код формы руками (форма списка, form-3 16.10.2026: заготовка перехватчика, затем Edit).
+# 1c-form-code и писала код формы руками (заготовка перехватчика, затем правка модуля).
 # Доработка формы и перехват ее методов (раздел intercepts) делает генератор; флага-исключения нет: модель
-# повторяла вызов с ним сразу после отказа (form-3 16.10.2026).
+# повторяла вызов с ним сразу после отказа.
 $formXmlPath = Join-Path (Split-Path (Split-Path $bslFile -Parent) -Parent) "Form.xml"
 $moduleEmpty = -not ((Test-Path $bslFile) -and (Read-Bsl $bslFile).Trim())
 if ($isFormModule -and $moduleEmpty -and (Test-Path $formXmlPath) -and

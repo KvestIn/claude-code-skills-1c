@@ -2528,7 +2528,7 @@ def find_property_element(prop_name):
 def ensure_property_element(prop_name):
     """Элемент сложного свойства (RegisterRecords, BasedOn...) или новый пустой в конце Properties. У объекта,
     заимствованного в расширение, в Properties только ObjectBelonging, Name и ExtendedConfigurationObject: без
-    создания элемента set-registerRecords молча ничего не делал (14.10.2026, свой регистр в движениях
+    создания элемента set-registerRecords молча ничего не делал (свой регистр в движениях
     заимствованного документа; загрузка в базы УТ и УНФ подтвердила, что такой элемент платформа принимает)."""
     prop_el = find_property_element(prop_name)
     if prop_el is not None:
@@ -2788,7 +2788,7 @@ def main():
     resolved_path = os.path.abspath(object_path)
 
     # Ввод на основании через BasedOn в конфигурации на БСП не дает команды: формы БСП скрывают штатное подменю
-    # платформы и строят свое из ДобавитьКомандыСозданияНаОсновании менеджера (cmd-4 16.10.2026: BasedOn у
+    # платформы и строят свое из ДобавитьКомандыСозданияНаОсновании менеджера (BasedOn у
     # заимствованного счета, команда в форме заказа не появилась). Флага-исключения нет: модель использует его сразу.
     based_on_op = args.Operation in ("add-basedOn", "set-basedOn") or (
         definition is not None and re.search(r'"(add|set)?[-_]?basedOn"', json.dumps(definition), re.I) is not None)
